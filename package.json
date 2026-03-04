@@ -1,0 +1,21 @@
+{
+  "name": "talent-mail",
+  "private": true,
+  "version": "0.1.0",
+  "description": "独立型メール配信マイクロサービス - 自社版Resend",
+  "workspaces": [
+    "packages/api",
+    "packages/dashboard",
+    "packages/sdk"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspace=packages/api & npm run dev --workspace=packages/dashboard",
+    "dev:api": "npm run dev --workspace=packages/api",
+    "dev:dashboard": "npm run dev --workspace=packages/dashboard",
+    "build": "npm run build --workspaces",
+    "test": "npm run test --workspaces --if-present"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

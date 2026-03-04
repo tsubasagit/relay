@@ -1,0 +1,15 @@
+{
+  "name": "@apptalenthub/talentmail",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "prepublishOnly": "npm run build"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "typescript": "^5.6.0"
+  }
+}
