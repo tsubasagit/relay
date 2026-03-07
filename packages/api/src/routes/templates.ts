@@ -1,11 +1,12 @@
 import { Hono } from "hono";
 import { z } from "zod";
-import { eq } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import { db } from "../db/client.js";
 import { templates } from "../db/schema.js";
 import { generateId } from "../utils/id.js";
 import { extractVariables, renderTemplate } from "../services/template.js";
 import { sendMail } from "../services/mailer.js";
+import type { AuthContext } from "../middleware/combined-auth.js";
 
 const app = new Hono();
 
@@ -21,16 +22,22 @@ const updateTemplateSchema = createTemplateSchema.partial();
 
 // List templates
 app.get("/", async (c) => {
-  const rows = await db.select().from(templates).orderBy(templates.createdAt);
+  const auth = c.get("auth" as never) as AuthContext;
+  const rows = await db
+    .select()
+    .from(templates)
+    .where(eq(templates.orgId, auth.orgId))
+    .orderBy(templates.createdAt);
   return c.json({ data: rows });
 });
 
 // Get template by ID
 app.get("/:id", async (c) => {
+  const auth = c.get("auth" as never) as AuthContext;
   const [row] = await db
     .select()
     .from(templates)
-    .where(eq(templates.id, c.req.param("id")))
+    .where(and(eq(templates.id, c.req.param("id")), eq(templates.orgId, auth.orgId)))
     .limit(1);
 
   if (!row) return c.json({ error: "Template not found" }, 404);
@@ -39,6 +46,7 @@ app.get("/:id", async (c) => {
 
 // Create template
 app.post("/", async (c) => {
+  const auth = c.get("auth" as never) as AuthContext;
   const body = await c.req.json();
   const parsed = createTemplateSchema.safeParse(body);
   if (!parsed.success) {
@@ -49,6 +57,7 @@ app.post("/", async (c) => {
   const vars = extractVariables(parsed.data.bodyHtml);
   const row = {
     id: generateId("tmpl"),
+    orgId: auth.orgId,
     ...parsed.data,
     bodyText: parsed.data.bodyText ?? null,
     variables: vars,
@@ -63,11 +72,12 @@ app.post("/", async (c) => {
 
 // Update template
 app.put("/:id", async (c) => {
+  const auth = c.get("auth" as never) as AuthContext;
   const id = c.req.param("id");
   const [existing] = await db
     .select()
     .from(templates)
-    .where(eq(templates.id, id))
+    .where(and(eq(templates.id, id), eq(templates.orgId, auth.orgId)))
     .limit(1);
 
   if (!existing) return c.json({ error: "Template not found" }, 404);
@@ -100,6 +110,7 @@ app.put("/:id", async (c) => {
 
 // Test send template
 app.post("/:id/test", async (c) => {
+  const auth = c.get("auth" as never) as AuthContext;
   const id = c.req.param("id");
   const body = await c.req.json();
   const parsed = z
@@ -116,7 +127,7 @@ app.post("/:id/test", async (c) => {
   const [tmpl] = await db
     .select()
     .from(templates)
-    .where(eq(templates.id, id))
+    .where(and(eq(templates.id, id), eq(templates.orgId, auth.orgId)))
     .limit(1);
 
   if (!tmpl) return c.json({ error: "Template not found" }, 404);
@@ -128,7 +139,13 @@ app.post("/:id/test", async (c) => {
     : undefined;
 
   try {
-    await sendMail({ to: parsed.data.to, subject, html, text });
+    await sendMail(auth.orgId, {
+      from: `TalentMail <noreply@talentmail.dev>`,
+      to: parsed.data.to,
+      subject,
+      html,
+      text,
+    });
     return c.json({ message: "Test email sent", to: parsed.data.to, subject });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
@@ -138,11 +155,12 @@ app.post("/:id/test", async (c) => {
 
 // Delete template
 app.delete("/:id", async (c) => {
+  const auth = c.get("auth" as never) as AuthContext;
   const id = c.req.param("id");
   const [existing] = await db
     .select()
     .from(templates)
-    .where(eq(templates.id, id))
+    .where(and(eq(templates.id, id), eq(templates.orgId, auth.orgId)))
     .limit(1);
 
   if (!existing) return c.json({ error: "Template not found" }, 404);

@@ -1,18 +1,30 @@
 version: "3.8"
 
 services:
+  postgres:
+    image: postgres:16-alpine
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: talentmail
+      POSTGRES_USER: talentmail
+      POSTGRES_PASSWORD: talentmail
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
   api:
     build:
       context: .
       dockerfile: packages/api/Dockerfile
     ports:
-      - "3456:3456"
-    volumes:
-      - ./data:/app/data
+      - "3456:8080"
+    depends_on:
+      - postgres
     env_file:
       - .env
     environment:
-      - DATABASE_PATH=/app/data/talentmail.db
+      - API_PORT=8080
+      - DATABASE_URL=postgres://talentmail:talentmail@postgres:5432/talentmail
 
   dashboard:
     build:
@@ -22,3 +34,6 @@ services:
       - "5173:80"
     depends_on:
       - api
+
+volumes:
+  pgdata:

@@ -4,17 +4,34 @@ import {
   FileText,
   Send,
   BarChart3,
-  Settings,
   Mail,
   X,
+  Globe,
+  Server,
+  AtSign,
+  Building2,
+  Key,
+  Users,
+  Users2,
+  Radio,
 } from "lucide-react";
 
 const navItems = [
   { to: "/", icon: LayoutDashboard, label: "ダッシュボード" },
+  { to: "/contacts", icon: Users, label: "コンタクト" },
+  { to: "/audiences", icon: Users2, label: "オーディエンス" },
+  { to: "/broadcasts", icon: Radio, label: "一斉配信" },
   { to: "/templates", icon: FileText, label: "テンプレート" },
   { to: "/logs", icon: Send, label: "配信ログ" },
   { to: "/analytics", icon: BarChart3, label: "分析" },
-  { to: "/settings", icon: Settings, label: "設定" },
+];
+
+const settingsItems = [
+  { to: "/settings/org", icon: Building2, label: "組織設定" },
+  { to: "/settings/domains", icon: Globe, label: "ドメイン" },
+  { to: "/settings/addresses", icon: AtSign, label: "送信アドレス" },
+  { to: "/settings/providers", icon: Server, label: "プロバイダー" },
+  { to: "/settings/keys", icon: Key, label: "APIキー" },
 ];
 
 interface SidebarProps {
@@ -74,10 +91,34 @@ export function Sidebar({ open, onClose }: SidebarProps) {
               {item.label}
             </NavLink>
           ))}
+
+          <div className="pt-4 pb-2 px-3">
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
+              設定
+            </p>
+          </div>
+
+          {settingsItems.map((item) => (
+            <NavLink
+              key={item.to}
+              to={item.to}
+              onClick={onClose}
+              className={({ isActive }) =>
+                `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors ${
+                  isActive
+                    ? "bg-indigo-600 text-white font-medium"
+                    : "text-gray-300 hover:bg-gray-800 hover:text-white"
+                }`
+              }
+            >
+              <item.icon className="w-5 h-5 flex-shrink-0" />
+              {item.label}
+            </NavLink>
+          ))}
         </nav>
 
         <div className="absolute bottom-0 left-0 right-0 px-6 py-4 border-t border-gray-700">
-          <p className="text-xs text-gray-500">v0.1.0</p>
+          <p className="text-xs text-gray-500">v0.2.0</p>
         </div>
       </aside>
     </>

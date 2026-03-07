@@ -1,12 +1,12 @@
 import { Hono } from "hono";
 import { z } from "zod";
-import { eq } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import { db } from "../db/client.js";
-import { templates, emailLogs } from "../db/schema.js";
+import { templates, emailLogs, sendingAddresses, domains } from "../db/schema.js";
 import { generateId } from "../utils/id.js";
 import { sendMail } from "../services/mailer.js";
 import { renderTemplate } from "../services/template.js";
-import { getSmtpConfig } from "../services/settings.js";
+import type { AuthContext } from "../middleware/combined-auth.js";
 
 const app = new Hono();
 
@@ -22,6 +22,7 @@ const sendEmailSchema = z.object({
 
 // Send single email
 app.post("/send", async (c) => {
+  const auth = c.get("auth" as never) as AuthContext;
   const body = await c.req.json();
   const parsed = sendEmailSchema.safeParse(body);
   if (!parsed.success) {
@@ -38,7 +39,7 @@ app.post("/send", async (c) => {
     const [tmpl] = await db
       .select()
       .from(templates)
-      .where(eq(templates.id, templateId))
+      .where(and(eq(templates.id, templateId), eq(templates.orgId, auth.orgId)))
       .limit(1);
 
     if (!tmpl) {
@@ -62,14 +63,36 @@ app.post("/send", async (c) => {
     );
   }
 
+  // Resolve from address
+  let fromAddress = from || "";
+  if (!fromAddress) {
+    // Use first sending address from org
+    const [addr] = await db
+      .select({
+        address: sendingAddresses.address,
+        displayName: sendingAddresses.displayName,
+      })
+      .from(sendingAddresses)
+      .innerJoin(domains, eq(sendingAddresses.domainId, domains.id))
+      .where(and(eq(sendingAddresses.orgId, auth.orgId), eq(domains.status, "verified")))
+      .limit(1);
+
+    if (addr) {
+      fromAddress = addr.displayName
+        ? `${addr.displayName} <${addr.address}>`
+        : addr.address;
+    } else {
+      fromAddress = "noreply@talentmail.dev";
+    }
+  }
+
   const now = new Date().toISOString();
   const logId = generateId("log");
-  const smtpCfg = getSmtpConfig();
-  const fromAddress = from || `${smtpCfg.fromName} <${smtpCfg.fromAddress}>`;
 
   // Create log entry
   await db.insert(emailLogs).values({
     id: logId,
+    orgId: auth.orgId,
     templateId: templateId ?? null,
     contactId: null,
     audienceId: null,
@@ -82,7 +105,7 @@ app.post("/send", async (c) => {
 
   // Send email
   try {
-    await sendMail({ to, subject, html, text, from: fromAddress });
+    await sendMail(auth.orgId, { from: fromAddress, to, subject, html, text });
 
     await db
       .update(emailLogs)

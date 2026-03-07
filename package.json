@@ -1,7 +1,7 @@
 {
   "name": "talent-mail",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "独立型メール配信マイクロサービス - 自社版Resend",
   "workspaces": [
     "packages/api",

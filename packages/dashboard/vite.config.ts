@@ -8,6 +8,7 @@ export default defineConfig({
     port: 5173,
     proxy: {
       "/api": "http://localhost:3456",
+      "/auth": "http://localhost:3456",
       "/unsubscribe": "http://localhost:3456",
     },
   },

@@ -1,21 +1,37 @@
 import { Hono } from "hono";
-import { eq } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import { db } from "../db/client.js";
 import { unsubscribes } from "../db/schema.js";
 import { generateId } from "../utils/id.js";
 
 const app = new Hono();
 
+// Token format: base64url(orgId:email)
+function decodeToken(token: string): { orgId: string; email: string } | null {
+  try {
+    const decoded = Buffer.from(token, "base64url").toString("utf-8");
+    const colonIdx = decoded.indexOf(":");
+    if (colonIdx === -1) {
+      // Legacy format: just email (no orgId) — treat as invalid
+      return null;
+    }
+    return {
+      orgId: decoded.slice(0, colonIdx),
+      email: decoded.slice(colonIdx + 1),
+    };
+  } catch {
+    return null;
+  }
+}
+
 // Unsubscribe landing page (GET)
 app.get("/:token", async (c) => {
-  const token = c.req.param("token");
-  // Token is base64url encoded email
-  let email: string;
-  try {
-    email = Buffer.from(token, "base64url").toString("utf-8");
-  } catch {
+  const parsed = decodeToken(c.req.param("token"));
+  if (!parsed) {
     return c.html("<h1>Invalid link</h1>", 400);
   }
+
+  const { email } = parsed;
 
   const html = `<!DOCTYPE html>
 <html lang="ja">
@@ -28,7 +44,6 @@ app.get("/:token", async (c) => {
     h1 { font-size: 1.5rem; }
     .btn { background: #1f2937; color: white; border: none; padding: 12px 24px; border-radius: 8px; font-size: 1rem; cursor: pointer; }
     .btn:hover { background: #374151; }
-    .success { color: #059669; }
   </style>
 </head>
 <body>
@@ -46,14 +61,12 @@ app.get("/:token", async (c) => {
 
 // Process unsubscribe (POST)
 app.post("/:token", async (c) => {
-  const token = c.req.param("token");
-  let email: string;
-  try {
-    email = Buffer.from(token, "base64url").toString("utf-8");
-  } catch {
+  const parsed = decodeToken(c.req.param("token"));
+  if (!parsed) {
     return c.html("<h1>Invalid link</h1>", 400);
   }
 
+  const { orgId, email } = parsed;
   const formData = await c.req.parseBody();
   const reason = (formData.reason as string) || null;
 
@@ -61,12 +74,13 @@ app.post("/:token", async (c) => {
   const [existing] = await db
     .select()
     .from(unsubscribes)
-    .where(eq(unsubscribes.email, email))
+    .where(and(eq(unsubscribes.orgId, orgId), eq(unsubscribes.email, email)))
     .limit(1);
 
   if (!existing) {
     await db.insert(unsubscribes).values({
       id: generateId("unsub"),
+      orgId,
       email,
       reason,
       source: "link",
@@ -93,12 +107,6 @@ app.post("/:token", async (c) => {
 </html>`;
 
   return c.html(html);
-});
-
-// API: List unsubscribes
-app.get("/", async (c) => {
-  const rows = await db.select().from(unsubscribes);
-  return c.json({ data: rows });
 });
 
 export default app;

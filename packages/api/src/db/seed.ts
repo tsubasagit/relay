@@ -1,39 +1,72 @@
 import "dotenv/config";
 import { db, sqlite } from "./client.js";
-import { apiKeys } from "./schema.js";
+import { apiKeys, organizations, orgMembers, users } from "./schema.js";
 import { generateId, generateApiKey } from "../utils/id.js";
 import { initDatabase } from "./init.js";
 
 initDatabase();
 
-// Check if any keys exist
-const existing = db.select().from(apiKeys).all();
-if (existing.length > 0) {
-  console.log("API keys already exist. Skipping seed.");
+// Check if any orgs exist
+const existingOrgs = db.select().from(organizations).all();
+if (existingOrgs.length > 0) {
+  console.log("Data already exists. Skipping seed.");
+  sqlite.close();
   process.exit(0);
 }
 
+const now = new Date().toISOString();
+
+// Create a default org
+const orgId = generateId("org");
+db.insert(organizations).values({
+  id: orgId,
+  name: "AppTalentHub",
+  slug: "apptalenthub",
+  plan: "free",
+  createdAt: now,
+}).run();
+
+// Create a seed user
+const userId = generateId("usr");
+db.insert(users).values({
+  id: userId,
+  googleId: "seed-user",
+  email: "admin@apptalenthub.co.jp",
+  name: "Admin",
+  avatarUrl: null,
+  createdAt: now,
+}).run();
+
+// Add user as admin of org
+db.insert(orgMembers).values({
+  id: generateId("mem"),
+  orgId,
+  userId,
+  role: "admin",
+  joinedAt: now,
+}).run();
+
 // Create initial API key
 const { key, hash, prefix } = generateApiKey();
-const row = {
+db.insert(apiKeys).values({
   id: generateId("key"),
+  orgId,
   name: "初期キー",
   keyHash: hash,
   keyPrefix: prefix,
   scopes: ["send", "templates", "logs", "keys"],
   isActive: true,
-  createdAt: new Date().toISOString(),
-};
-
-db.insert(apiKeys).values(row).run();
+  createdBy: userId,
+  createdAt: now,
+}).run();
 
 console.log("=".repeat(60));
-console.log("初期APIキーを作成しました");
-console.log("このキーは一度だけ表示されます。安全に保存してください。");
+console.log("Seed completed!");
 console.log("");
+console.log(`  Organization: AppTalentHub (${orgId})`);
 console.log(`  API Key: ${key}`);
 console.log("");
-console.log("Dashboardの設定画面にこのキーを入力してください。");
+console.log("このAPIキーは一度だけ表示されます。安全に保存してください。");
 console.log("=".repeat(60));
 
 sqlite.close();
