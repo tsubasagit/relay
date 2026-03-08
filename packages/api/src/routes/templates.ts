@@ -140,7 +140,7 @@ app.post("/:id/test", async (c) => {
 
   try {
     await sendMail(auth.orgId, {
-      from: `TalentMail <noreply@talentmail.dev>`,
+      from: `Relay <noreply@relay.email>`,
       to: parsed.data.to,
       subject,
       html,

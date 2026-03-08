@@ -12,6 +12,6 @@ serve(
     port: config.port,
   },
   (info) => {
-    console.log(`TalentMail API running on http://localhost:${info.port}`);
+    console.log(`Relay API running on http://localhost:${info.port}`);
   }
 );

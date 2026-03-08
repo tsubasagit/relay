@@ -7,7 +7,7 @@ export default function Login() {
         <div className="inline-flex p-3 bg-indigo-600 rounded-xl mb-4">
           <Mail className="w-8 h-8 text-white" />
         </div>
-        <h1 className="text-2xl font-bold text-gray-900 mb-2">TalentMail</h1>
+        <h1 className="text-2xl font-bold text-gray-900 mb-2">Relay</h1>
         <p className="text-sm text-gray-500 mb-6">
           メール配信管理ダッシュボード
         </p>

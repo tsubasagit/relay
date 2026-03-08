@@ -1,4 +1,4 @@
-export interface TalentMailConfig {
+export interface RelayConfig {
   baseUrl: string;
   apiKey: string;
 }
@@ -20,11 +20,11 @@ export interface SendEmailResult {
   subject: string;
 }
 
-export class TalentMailClient {
+export class RelayClient {
   private baseUrl: string;
   private apiKey: string;
 
-  constructor(config: TalentMailConfig) {
+  constructor(config: RelayConfig) {
     this.baseUrl = config.baseUrl.replace(/\/$/, "");
     this.apiKey = config.apiKey;
   }

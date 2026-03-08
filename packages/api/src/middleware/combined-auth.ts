@@ -18,7 +18,7 @@ export interface AuthContext {
 export const combinedAuth = createMiddleware(async (c, next) => {
   // Try API key first
   const authHeader = c.req.header("Authorization");
-  if (authHeader?.startsWith("Bearer tm_live_")) {
+  if (authHeader?.startsWith("Bearer rl_live_")) {
     const key = authHeader.slice(7);
     const keyHash = hashApiKey(key);
     const [found] = await db
@@ -43,7 +43,7 @@ export const combinedAuth = createMiddleware(async (c, next) => {
 
   // Try session cookie
   const cookieHeader = c.req.header("Cookie") || "";
-  const match = cookieHeader.match(/talentmail_session=([^;]+)/);
+  const match = cookieHeader.match(/relay_session=([^;]+)/);
   if (!match) {
     return c.json({ error: "Missing authentication" }, 401);
   }

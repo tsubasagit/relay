@@ -60,7 +60,7 @@ export function Sidebar({ open, onClose }: SidebarProps) {
               <Mail className="w-5 h-5" />
             </div>
             <div>
-              <h1 className="text-lg font-bold">TalentMail</h1>
+              <h1 className="text-lg font-bold">Relay</h1>
               <p className="text-xs text-gray-400">メール配信管理</p>
             </div>
           </div>

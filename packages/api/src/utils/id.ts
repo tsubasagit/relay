@@ -7,7 +7,7 @@ export function generateId(prefix: string): string {
 
 export function generateApiKey(): { key: string; hash: string; prefix: string } {
   const raw = randomBytes(32).toString("base64url");
-  const key = `tm_live_${raw}`;
+  const key = `rl_live_${raw}`;
   const hash = createHash("sha256").update(key).digest("hex");
   const prefix = key.slice(0, 12);
   return { key, hash, prefix };

@@ -1,10 +1,10 @@
 const API_BASE = "/api";
 
-let currentOrgId = localStorage.getItem("talentmail_org_id") || "";
+let currentOrgId = localStorage.getItem("relay_org_id") || "";
 
 export function setOrgId(orgId: string) {
   currentOrgId = orgId;
-  localStorage.setItem("talentmail_org_id", orgId);
+  localStorage.setItem("relay_org_id", orgId);
 }
 
 export function getOrgId(): string {

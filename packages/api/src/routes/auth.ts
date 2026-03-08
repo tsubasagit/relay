@@ -75,7 +75,7 @@ app.get("/google/callback", async (c) => {
       status: 302,
       headers: {
         Location: "/",
-        "Set-Cookie": `talentmail_session=${sessionId}; ${cookieOpts}`,
+        "Set-Cookie": `relay_session=${sessionId}; ${cookieOpts}`,
       },
     });
   } catch (err) {
@@ -93,7 +93,7 @@ app.get("/me", sessionAuth, async (c) => {
 // Logout
 app.post("/logout", async (c) => {
   const cookieHeader = c.req.header("Cookie") || "";
-  const match = cookieHeader.match(/talentmail_session=([^;]+)/);
+  const match = cookieHeader.match(/relay_session=([^;]+)/);
   if (match) {
     await db.delete(sessions).where(eq(sessions.id, match[1]));
   }
@@ -102,7 +102,7 @@ app.post("/logout", async (c) => {
     status: 200,
     headers: {
       "Content-Type": "application/json",
-      "Set-Cookie": "talentmail_session=; Path=/; HttpOnly; Max-Age=0",
+      "Set-Cookie": "relay_session=; Path=/; HttpOnly; Max-Age=0",
     },
   });
 });

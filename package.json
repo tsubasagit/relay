@@ -1,8 +1,8 @@
 {
-  "name": "talent-mail",
+  "name": "relay",
   "private": true,
-  "version": "0.2.0",
-  "description": "独立型メール配信マイクロサービス - 自社版Resend",
+  "version": "0.3.0",
+  "description": "Developer-friendly email delivery platform - Open alternative to Resend",
   "workspaces": [
     "packages/api",
     "packages/dashboard",

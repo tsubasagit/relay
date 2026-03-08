@@ -11,7 +11,7 @@ export const apiKeyAuth = createMiddleware(async (c, next) => {
   }
 
   const key = authHeader.slice(7);
-  if (!key.startsWith("tm_live_")) {
+  if (!key.startsWith("rl_live_")) {
     return c.json({ error: "Invalid API key format" }, 401);
   }
 

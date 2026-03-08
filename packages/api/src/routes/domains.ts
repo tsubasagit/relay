@@ -48,7 +48,7 @@ app.post("/", async (c) => {
     return c.json({ error: "Domain already registered" }, 409);
   }
 
-  const verificationToken = `talentmail-verify-${randomBytes(16).toString("hex")}`;
+  const verificationToken = `relay-verify-${randomBytes(16).toString("hex")}`;
   const now = new Date().toISOString();
 
   await db.insert(domains).values({
@@ -70,9 +70,9 @@ app.post("/", async (c) => {
     data: created,
     dnsInstructions: {
       type: "TXT",
-      name: `_talentmail.${domainName}`,
+      name: `_relay.${domainName}`,
       value: verificationToken,
-      description: `Add a TXT record for _talentmail.${domainName} with the value above to verify ownership.`,
+      description: `Add a TXT record for _relay.${domainName} with the value above to verify ownership.`,
     },
   }, 201);
 });
@@ -95,7 +95,7 @@ app.post("/:id/verify", async (c) => {
   }
 
   try {
-    const records = await dns.resolveTxt(`_talentmail.${domain.domain}`);
+    const records = await dns.resolveTxt(`_relay.${domain.domain}`);
     const flatRecords = records.map((r) => r.join(""));
     const verified = flatRecords.includes(domain.verificationToken);
 
@@ -111,13 +111,13 @@ app.post("/:id/verify", async (c) => {
 
     return c.json({
       error: "Verification failed",
-      details: `TXT record _talentmail.${domain.domain} not found or doesn't match.`,
+      details: `TXT record _relay.${domain.domain} not found or doesn't match.`,
       expected: domain.verificationToken,
     }, 400);
   } catch (err) {
     return c.json({
       error: "DNS lookup failed",
-      details: `Could not resolve _talentmail.${domain.domain}. Please check your DNS settings.`,
+      details: `Could not resolve _relay.${domain.domain}. Please check your DNS settings.`,
     }, 400);
   }
 });

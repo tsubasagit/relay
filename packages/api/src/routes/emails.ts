@@ -82,7 +82,7 @@ app.post("/send", async (c) => {
         ? `${addr.displayName} <${addr.address}>`
         : addr.address;
     } else {
-      fromAddress = "noreply@talentmail.dev";
+      fromAddress = "noreply@relay.email";
     }
   }
 

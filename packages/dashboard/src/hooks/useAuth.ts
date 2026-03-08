@@ -60,7 +60,7 @@ export function useAuth(): AuthState {
     setUser(null);
     setOrgsData([]);
     setCurrentOrg(null);
-    localStorage.removeItem("talentmail_org_id");
+    localStorage.removeItem("relay_org_id");
     window.location.href = "/login";
   }, []);
 

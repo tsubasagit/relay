@@ -5,7 +5,7 @@ const app = new Hono();
 app.get("/", (c) => {
   return c.json({
     status: "ok",
-    service: "TalentMail",
+    service: "Relay",
     version: "0.1.0",
     timestamp: new Date().toISOString(),
   });

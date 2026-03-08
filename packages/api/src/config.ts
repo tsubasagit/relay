@@ -3,7 +3,7 @@ import "dotenv/config";
 export const config = {
   port: parseInt(process.env.API_PORT || "3456"),
   baseUrl: process.env.API_BASE_URL || "http://localhost:3456",
-  databasePath: process.env.DATABASE_PATH || "./data/talentmail.db",
+  databasePath: process.env.DATABASE_PATH || "./data/relay.db",
 
   // Google OAuth
   googleClientId: process.env.GOOGLE_CLIENT_ID || "",

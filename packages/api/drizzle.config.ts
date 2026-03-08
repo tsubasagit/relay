@@ -5,6 +5,6 @@ export default defineConfig({
   out: "./src/db/migrations",
   dialect: "sqlite",
   dbCredentials: {
-    url: process.env.DATABASE_PATH || "./data/talentmail.db",
+    url: process.env.DATABASE_PATH || "./data/relay.db",
   },
 });
