@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { z } from "zod";
-import { eq, and, desc, sql } from "drizzle-orm";
+import { eq, and, desc, sql, inArray } from "drizzle-orm";
 import { db } from "../db/client.js";
 import {
   broadcasts,
@@ -11,12 +11,10 @@ import {
   sendingAddresses,
   domains,
   emailLogs,
-  unsubscribes,
 } from "../db/schema.js";
 import { generateId } from "../utils/id.js";
-import { sendMail } from "../services/mailer.js";
 import { renderTemplate } from "../services/template.js";
-import { config } from "../config.js";
+import { processBroadcast } from "../services/broadcast-processor.js";
 import type { AuthContext } from "../middleware/combined-auth.js";
 
 const app = new Hono();
@@ -34,6 +32,7 @@ app.get("/", async (c) => {
       templateId: broadcasts.templateId,
       fromAddress: broadcasts.fromAddress,
       subject: broadcasts.subject,
+      scheduledAt: broadcasts.scheduledAt,
       status: broadcasts.status,
       totalCount: broadcasts.totalCount,
       sentCount: broadcasts.sentCount,
@@ -73,6 +72,7 @@ app.get("/:id", async (c) => {
       fromAddress: broadcasts.fromAddress,
       subject: broadcasts.subject,
       variables: broadcasts.variables,
+      scheduledAt: broadcasts.scheduledAt,
       status: broadcasts.status,
       totalCount: broadcasts.totalCount,
       sentCount: broadcasts.sentCount,
@@ -108,7 +108,7 @@ app.get("/:id", async (c) => {
   return c.json({ data: { ...broadcast, logs: logRows } });
 });
 
-// Create & start broadcast
+// Create & start (or schedule) broadcast
 app.post("/", async (c) => {
   const auth = c.get("auth" as never) as AuthContext;
   const body = await c.req.json();
@@ -118,6 +118,7 @@ app.post("/", async (c) => {
     templateId: z.string(),
     fromAddressId: z.string(),
     variables: z.record(z.string()).optional(),
+    scheduledAt: z.string().optional(),
   });
 
   const parsed = schema.safeParse(body);
@@ -125,7 +126,7 @@ app.post("/", async (c) => {
     return c.json({ error: "Validation failed", details: parsed.error.flatten() }, 400);
   }
 
-  const { audienceId, templateId, fromAddressId, variables } = parsed.data;
+  const { audienceId, templateId, fromAddressId, variables, scheduledAt } = parsed.data;
 
   // Validate audience
   const [audience] = await db
@@ -155,10 +156,11 @@ app.post("/", async (c) => {
       id: sendingAddresses.id,
       address: sendingAddresses.address,
       displayName: sendingAddresses.displayName,
+      domainId: sendingAddresses.domainId,
       domainStatus: domains.status,
     })
     .from(sendingAddresses)
-    .innerJoin(domains, eq(sendingAddresses.domainId, domains.id))
+    .leftJoin(domains, eq(sendingAddresses.domainId, domains.id))
     .where(and(eq(sendingAddresses.id, fromAddressId), eq(sendingAddresses.orgId, auth.orgId)))
     .limit(1);
 
@@ -166,7 +168,8 @@ app.post("/", async (c) => {
     return c.json({ error: "Sending address not found" }, 404);
   }
 
-  if (addr.domainStatus !== "verified") {
+  // Gmail OAuth addresses (no domain) are always valid; others require verified domain
+  if (addr.domainId && addr.domainStatus !== "verified") {
     return c.json({ error: "Domain is not verified" }, 400);
   }
 
@@ -187,6 +190,9 @@ app.post("/", async (c) => {
     .from(audienceContacts)
     .where(eq(audienceContacts.audienceId, audienceId));
 
+  const isScheduled = !!scheduledAt && new Date(scheduledAt) > new Date();
+  const status = isScheduled ? "scheduled" : "sending";
+
   await db.insert(broadcasts).values({
     id: broadcastId,
     orgId: auth.orgId,
@@ -196,7 +202,8 @@ app.post("/", async (c) => {
     fromAddress,
     subject: renderedSubject,
     variables: variables || null,
-    status: "sending",
+    scheduledAt: scheduledAt || null,
+    status,
     totalCount: contactCount,
     sentCount: 0,
     failedCount: 0,
@@ -204,160 +211,203 @@ app.post("/", async (c) => {
     createdAt: now,
   });
 
-  // Return immediately, process in background
+  // Return immediately
   const responseData = {
     id: broadcastId,
-    status: "sending",
+    status,
+    scheduledAt: scheduledAt || null,
     totalCount: contactCount,
     subject: renderedSubject,
   };
 
-  // Background send process
-  processBroadcast(auth.orgId, broadcastId, audienceId, tmpl, fromAddress, variables || {}).catch(
-    (err) => {
+  // If not scheduled, start processing immediately
+  if (!isScheduled) {
+    processBroadcast(
+      auth.orgId,
+      broadcastId,
+      audienceId,
+      {
+        id: tmpl.id,
+        subject: tmpl.subject,
+        bodyHtml: tmpl.bodyHtml,
+        bodyText: tmpl.bodyText,
+        category: tmpl.category,
+      },
+      fromAddress,
+      variables || {}
+    ).catch((err) => {
       console.error(`Broadcast ${broadcastId} failed:`, err);
-    }
-  );
+    });
+  }
 
   return c.json({ data: responseData }, 201);
 });
 
-async function processBroadcast(
-  orgId: string,
-  broadcastId: string,
-  audienceId: string,
-  tmpl: {
-    id: string;
-    subject: string;
-    bodyHtml: string;
-    bodyText: string | null;
-  },
-  fromAddress: string,
-  variables: Record<string, string>
-) {
-  try {
-    // Get all contacts in audience
-    const members = await db
-      .select({
-        id: contacts.id,
-        email: contacts.email,
-        name: contacts.name,
-        isUnsubscribed: contacts.isUnsubscribed,
-      })
-      .from(audienceContacts)
-      .innerJoin(contacts, eq(audienceContacts.contactId, contacts.id))
-      .where(eq(audienceContacts.audienceId, audienceId));
+// Quick send to selected contacts (creates temp audience automatically)
+app.post("/quick-send", async (c) => {
+  const auth = c.get("auth" as never) as AuthContext;
+  const body = await c.req.json();
 
-    // Get unsubscribed emails for this org
-    const unsubs = await db
-      .select({ email: unsubscribes.email })
-      .from(unsubscribes)
-      .where(eq(unsubscribes.orgId, orgId));
+  const schema = z.object({
+    contactIds: z.array(z.string()).min(1),
+    templateId: z.string(),
+    fromAddressId: z.string(),
+    variables: z.record(z.string()).optional(),
+  });
 
-    const unsubSet = new Set(unsubs.map((u) => u.email.toLowerCase()));
-
-    let sentCount = 0;
-    let failedCount = 0;
-    let skippedCount = 0;
-
-    for (const member of members) {
-      // Check unsubscribe status
-      if (member.isUnsubscribed || unsubSet.has(member.email.toLowerCase())) {
-        skippedCount++;
-        await db
-          .update(broadcasts)
-          .set({ skippedCount })
-          .where(eq(broadcasts.id, broadcastId));
-        continue;
-      }
-
-      // Merge variables with contact info
-      const mergedVars = {
-        ...variables,
-        email: member.email,
-        name: member.name || "",
-      };
-
-      const subject = renderTemplate(tmpl.subject, mergedVars);
-      const unsubToken = Buffer.from(`${orgId}:${member.email}`).toString("base64url");
-      const unsubLink = `${config.baseUrl}/unsubscribe/${unsubToken}`;
-
-      // Append unsubscribe link to HTML
-      let html = renderTemplate(tmpl.bodyHtml, mergedVars);
-      html += `<p style="margin-top:24px;padding-top:16px;border-top:1px solid #e5e7eb;font-size:12px;color:#9ca3af;text-align:center;">
-        <a href="${unsubLink}" style="color:#9ca3af;">配信停止はこちら</a>
-      </p>`;
-
-      let text: string | undefined;
-      if (tmpl.bodyText) {
-        text = renderTemplate(tmpl.bodyText, mergedVars);
-        text += `\n\n---\n配信停止: ${unsubLink}`;
-      }
-
-      const logId = generateId("log");
-      const now = new Date().toISOString();
-
-      // Create log entry
-      await db.insert(emailLogs).values({
-        id: logId,
-        orgId,
-        templateId: tmpl.id,
-        broadcastId,
-        contactId: member.id,
-        audienceId,
-        fromAddress,
-        toAddress: member.email,
-        subject,
-        status: "queued",
-        createdAt: now,
-      });
-
-      try {
-        await sendMail(orgId, { from: fromAddress, to: member.email, subject, html, text });
-
-        await db
-          .update(emailLogs)
-          .set({ status: "sent", sentAt: new Date().toISOString() })
-          .where(eq(emailLogs.id, logId));
-
-        sentCount++;
-      } catch {
-        await db
-          .update(emailLogs)
-          .set({ status: "failed" })
-          .where(eq(emailLogs.id, logId));
-
-        failedCount++;
-      }
-
-      // Update broadcast progress
-      await db
-        .update(broadcasts)
-        .set({ sentCount, failedCount, skippedCount })
-        .where(eq(broadcasts.id, broadcastId));
-
-      // Rate limiting: 50ms between sends
-      await new Promise((resolve) => setTimeout(resolve, 50));
-    }
-
-    // Mark completed
-    await db
-      .update(broadcasts)
-      .set({
-        status: "completed",
-        sentCount,
-        failedCount,
-        skippedCount,
-        completedAt: new Date().toISOString(),
-      })
-      .where(eq(broadcasts.id, broadcastId));
-  } catch (err) {
-    console.error(`Broadcast ${broadcastId} error:`, err);
-    await db
-      .update(broadcasts)
-      .set({ status: "failed", completedAt: new Date().toISOString() })
-      .where(eq(broadcasts.id, broadcastId));
+  const parsed = schema.safeParse(body);
+  if (!parsed.success) {
+    return c.json({ error: "Validation failed", details: parsed.error.flatten() }, 400);
   }
-}
+
+  const { contactIds, templateId, fromAddressId, variables } = parsed.data;
+
+  // Validate template
+  const [tmpl] = await db
+    .select()
+    .from(templates)
+    .where(and(eq(templates.id, templateId), eq(templates.orgId, auth.orgId)))
+    .limit(1);
+
+  if (!tmpl) {
+    return c.json({ error: "Template not found" }, 404);
+  }
+
+  // Validate sending address
+  const [addr] = await db
+    .select({
+      id: sendingAddresses.id,
+      address: sendingAddresses.address,
+      displayName: sendingAddresses.displayName,
+      domainId: sendingAddresses.domainId,
+      domainStatus: domains.status,
+    })
+    .from(sendingAddresses)
+    .leftJoin(domains, eq(sendingAddresses.domainId, domains.id))
+    .where(and(eq(sendingAddresses.id, fromAddressId), eq(sendingAddresses.orgId, auth.orgId)))
+    .limit(1);
+
+  if (!addr) {
+    return c.json({ error: "Sending address not found" }, 404);
+  }
+
+  if (addr.domainId && addr.domainStatus !== "verified") {
+    return c.json({ error: "Domain is not verified" }, 400);
+  }
+
+  // Validate contacts exist and belong to org
+  const validContacts = await db
+    .select({ id: contacts.id })
+    .from(contacts)
+    .where(and(eq(contacts.orgId, auth.orgId), inArray(contacts.id, contactIds)));
+
+  if (validContacts.length === 0) {
+    return c.json({ error: "No valid contacts found" }, 400);
+  }
+
+  const fromAddr = addr.displayName
+    ? `${addr.displayName} <${addr.address}>`
+    : addr.address;
+
+  const renderedSubject = renderTemplate(tmpl.subject, variables || {});
+  const now = new Date();
+  const nowStr = now.toISOString();
+
+  // Create temporary audience
+  const audienceId = generateId("aud");
+  const audienceName = `クイック送信 ${now.toLocaleDateString("ja-JP")} ${now.toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" })}`;
+
+  await db.insert(audiences).values({
+    id: audienceId,
+    orgId: auth.orgId,
+    name: audienceName,
+    description: `コンタクトリストから${validContacts.length}件を選択して送信`,
+    contactCount: validContacts.length,
+    createdAt: nowStr,
+  });
+
+  // Add contacts to audience
+  await db.insert(audienceContacts).values(
+    validContacts.map((c) => ({
+      audienceId,
+      contactId: c.id,
+      addedAt: nowStr,
+    }))
+  );
+
+  // Create broadcast record
+  const broadcastId = generateId("bcast");
+
+  await db.insert(broadcasts).values({
+    id: broadcastId,
+    orgId: auth.orgId,
+    audienceId,
+    templateId,
+    fromAddressId,
+    fromAddress: fromAddr,
+    subject: renderedSubject,
+    variables: variables || null,
+    status: "sending",
+    totalCount: validContacts.length,
+    sentCount: 0,
+    failedCount: 0,
+    skippedCount: 0,
+    createdAt: nowStr,
+  });
+
+  // Start processing
+  processBroadcast(
+    auth.orgId,
+    broadcastId,
+    audienceId,
+    {
+      id: tmpl.id,
+      subject: tmpl.subject,
+      bodyHtml: tmpl.bodyHtml,
+      bodyText: tmpl.bodyText,
+      category: tmpl.category,
+    },
+    fromAddr,
+    variables || {}
+  ).catch((err) => {
+    console.error(`Quick send broadcast ${broadcastId} failed:`, err);
+  });
+
+  return c.json({
+    data: {
+      id: broadcastId,
+      status: "sending",
+      totalCount: validContacts.length,
+      subject: renderedSubject,
+    },
+  }, 201);
+});
+
+// Cancel scheduled broadcast
+app.post("/:id/cancel", async (c) => {
+  const auth = c.get("auth" as never) as AuthContext;
+  const id = c.req.param("id");
+
+  const [broadcast] = await db
+    .select()
+    .from(broadcasts)
+    .where(and(eq(broadcasts.id, id), eq(broadcasts.orgId, auth.orgId)))
+    .limit(1);
+
+  if (!broadcast) {
+    return c.json({ error: "Broadcast not found" }, 404);
+  }
+
+  if (broadcast.status !== "scheduled") {
+    return c.json({ error: "Only scheduled broadcasts can be cancelled" }, 400);
+  }
+
+  await db
+    .update(broadcasts)
+    .set({ status: "draft", scheduledAt: null })
+    .where(eq(broadcasts.id, id));
+
+  return c.json({ message: "Broadcast cancelled" });
+});
 
 export default app;

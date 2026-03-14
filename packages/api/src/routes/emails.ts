@@ -2,10 +2,14 @@ import { Hono } from "hono";
 import { z } from "zod";
 import { eq, and } from "drizzle-orm";
 import { db } from "../db/client.js";
-import { templates, emailLogs, sendingAddresses, domains } from "../db/schema.js";
+import { templates, emailLogs, sendingAddresses } from "../db/schema.js";
 import { generateId } from "../utils/id.js";
 import { sendMail } from "../services/mailer.js";
 import { renderTemplate } from "../services/template.js";
+import { buildUnsubscribeData } from "../services/unsubscribe-helper.js";
+import { dispatchWebhookEvent } from "../services/webhook-dispatcher.js";
+import { buildEmailPayload } from "../services/webhook-events.js";
+import { config } from "../config.js";
 import type { AuthContext } from "../middleware/combined-auth.js";
 
 const app = new Hono();
@@ -35,6 +39,7 @@ app.post("/send", async (c) => {
   let text = parsed.data.text;
 
   // Resolve template if provided
+  let emailHeaders: Record<string, string> | undefined;
   if (templateId) {
     const [tmpl] = await db
       .select()
@@ -53,6 +58,14 @@ app.post("/send", async (c) => {
     html = renderTemplate(tmpl.bodyHtml, variables || {});
     if (tmpl.bodyText) {
       text = renderTemplate(tmpl.bodyText, variables || {});
+    }
+
+    // Add unsubscribe headers/footer for marketing emails
+    if (tmpl.category === "marketing") {
+      const unsub = buildUnsubscribeData(config.baseUrl, auth.orgId, to);
+      html += unsub.htmlFooter;
+      if (text) text += unsub.textFooter;
+      emailHeaders = unsub.headers;
     }
   }
 
@@ -73,8 +86,7 @@ app.post("/send", async (c) => {
         displayName: sendingAddresses.displayName,
       })
       .from(sendingAddresses)
-      .innerJoin(domains, eq(sendingAddresses.domainId, domains.id))
-      .where(and(eq(sendingAddresses.orgId, auth.orgId), eq(domains.status, "verified")))
+      .where(eq(sendingAddresses.orgId, auth.orgId))
       .limit(1);
 
     if (addr) {
@@ -105,12 +117,24 @@ app.post("/send", async (c) => {
 
   // Send email
   try {
-    await sendMail(auth.orgId, { from: fromAddress, to, subject, html, text });
+    await sendMail(auth.orgId, { from: fromAddress, to, subject, html, text, headers: emailHeaders });
 
     await db
       .update(emailLogs)
       .set({ status: "sent", sentAt: new Date().toISOString() })
       .where(eq(emailLogs.id, logId));
+
+    dispatchWebhookEvent(
+      auth.orgId,
+      "email.sent",
+      buildEmailPayload("email.sent", auth.orgId, {
+        logId,
+        to,
+        from: fromAddress,
+        subject,
+        templateId: templateId || undefined,
+      })
+    );
 
     return c.json({
       data: { id: logId, status: "sent", to, subject },
@@ -119,8 +143,20 @@ app.post("/send", async (c) => {
     const message = err instanceof Error ? err.message : "Unknown error";
     await db
       .update(emailLogs)
-      .set({ status: "failed" })
+      .set({ status: "failed", errorMessage: message })
       .where(eq(emailLogs.id, logId));
+
+    dispatchWebhookEvent(
+      auth.orgId,
+      "email.failed",
+      buildEmailPayload("email.failed", auth.orgId, {
+        logId,
+        to,
+        from: fromAddress,
+        subject,
+        templateId: templateId || undefined,
+      })
+    );
 
     return c.json({ error: "Failed to send email", details: message }, 500);
   }

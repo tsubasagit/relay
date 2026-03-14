@@ -1,4 +1,9 @@
-import "dotenv/config";
+import { config as dotenvConfig } from "dotenv";
+import { resolve, dirname } from "path";
+import { fileURLToPath } from "url";
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+dotenvConfig({ path: resolve(__dirname, "../../../.env") });
 
 export const config = {
   port: parseInt(process.env.API_PORT || "3456"),
@@ -15,4 +20,14 @@ export const config = {
 
   // Encryption key for provider configs (32 bytes hex)
   encryptionKey: process.env.ENCRYPTION_KEY || "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+
+  // Dashboard URL
+  dashboardUrl: process.env.DASHBOARD_URL || "http://localhost:5173",
+
+  // Default SMTP provider (Gmail)
+  defaultSmtpHost: process.env.RELAY_DEFAULT_SMTP_HOST || "smtp.gmail.com",
+  defaultSmtpPort: parseInt(process.env.RELAY_DEFAULT_SMTP_PORT || "587"),
+  defaultSmtpUser: process.env.RELAY_DEFAULT_SMTP_USER || "",
+  defaultSmtpPass: process.env.RELAY_DEFAULT_SMTP_PASS || "",
+  defaultFrom: process.env.RELAY_DEFAULT_FROM || "",
 };

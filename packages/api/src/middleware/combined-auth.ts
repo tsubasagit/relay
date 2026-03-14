@@ -1,13 +1,14 @@
 import { createMiddleware } from "hono/factory";
 import { eq, and, gt } from "drizzle-orm";
 import { db } from "../db/client.js";
-import { apiKeys, orgMembers, sessions, users } from "../db/schema.js";
+import { apiKeys, orgMembers, organizations, sessions, users } from "../db/schema.js";
 import { hashApiKey } from "../utils/id.js";
 import type { SessionUser } from "./session.js";
 
 export interface AuthContext {
   user?: SessionUser;
   orgId: string;
+  plan: string;
   authType: "session" | "apikey";
 }
 
@@ -31,8 +32,15 @@ export const combinedAuth = createMiddleware(async (c, next) => {
       return c.json({ error: "Invalid or inactive API key" }, 401);
     }
 
+    const [org] = await db
+      .select({ plan: organizations.plan })
+      .from(organizations)
+      .where(eq(organizations.id, found.orgId))
+      .limit(1);
+
     const ctx: AuthContext = {
       orgId: found.orgId,
+      plan: org?.plan || "free",
       authType: "apikey",
     };
     c.set("auth" as never, ctx);
@@ -84,6 +92,12 @@ export const combinedAuth = createMiddleware(async (c, next) => {
     return c.json({ error: "Not a member of this organization" }, 403);
   }
 
+  const [org] = await db
+    .select({ plan: organizations.plan })
+    .from(organizations)
+    .where(eq(organizations.id, orgId))
+    .limit(1);
+
   const user: SessionUser = {
     id: session.userId,
     email: session.email,
@@ -94,6 +108,7 @@ export const combinedAuth = createMiddleware(async (c, next) => {
   const ctx: AuthContext = {
     user,
     orgId,
+    plan: org?.plan || "free",
     authType: "session",
   };
   c.set("auth" as never, ctx);

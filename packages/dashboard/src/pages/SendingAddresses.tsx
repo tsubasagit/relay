@@ -90,7 +90,7 @@ export default function SendingAddresses() {
           送信アドレス追加
         </h2>
         <p className="text-sm text-gray-500 mb-4">
-          検証済みドメインのメールアドレスを登録します
+          メールの「差出人」として表示されるアドレスです。Gmailアドレスはログイン時に自動登録されています。
         </p>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
           <div>
@@ -146,22 +146,22 @@ export default function SendingAddresses() {
                       {a.displayName ? `${a.displayName} <${a.address}>` : a.address}
                     </p>
                     <p className="text-xs text-gray-500">
-                      ドメイン: {a.domain}
+                      {a.domainId === null ? "Gmail" : `ドメイン: ${a.domain}`}
                     </p>
                   </div>
                   <span
                     className={`inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded-full font-medium ${
-                      a.domainStatus === "verified"
+                      a.domainId === null || a.domainStatus === "verified"
                         ? "bg-green-100 text-green-700"
                         : "bg-amber-100 text-amber-700"
                     }`}
                   >
-                    {a.domainStatus === "verified" ? (
+                    {a.domainId === null || a.domainStatus === "verified" ? (
                       <CheckCircle className="w-3 h-3" />
                     ) : (
                       <AlertCircle className="w-3 h-3" />
                     )}
-                    {a.domainStatus === "verified" ? "有効" : "ドメイン未検証"}
+                    {a.domainId === null || a.domainStatus === "verified" ? "有効" : "ドメイン未検証"}
                   </span>
                 </div>
                 <button

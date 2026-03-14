@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Send, Eye } from "lucide-react";
+import { ArrowLeft, Send, Eye, Clock } from "lucide-react";
 import {
   audiencesApi,
   templates as templatesApi,
@@ -23,6 +23,9 @@ export default function BroadcastComposer() {
   const [templateId, setTemplateId] = useState("");
   const [fromAddressId, setFromAddressId] = useState("");
   const [variables, setVariables] = useState<Record<string, string>>({});
+
+  const [sendMode, setSendMode] = useState<"now" | "schedule">("now");
+  const [scheduledAt, setScheduledAt] = useState("");
 
   const [sending, setSending] = useState(false);
   const [error, setError] = useState("");
@@ -64,7 +67,16 @@ export default function BroadcastComposer() {
       return;
     }
 
-    if (!confirm(`${selectedAudience?.contactCount || 0}件のコンタクトに配信を開始しますか？`)) {
+    if (sendMode === "schedule" && !scheduledAt) {
+      setError("配信日時を指定してください");
+      return;
+    }
+
+    const actionText = sendMode === "schedule"
+      ? `${selectedAudience?.contactCount || 0}件のコンタクトに予約配信を設定しますか？`
+      : `${selectedAudience?.contactCount || 0}件のコンタクトに配信を開始しますか？`;
+
+    if (!confirm(actionText)) {
       return;
     }
 
@@ -77,6 +89,7 @@ export default function BroadcastComposer() {
         templateId,
         fromAddressId,
         variables: Object.keys(variables).length > 0 ? variables : undefined,
+        scheduledAt: sendMode === "schedule" ? new Date(scheduledAt).toISOString() : undefined,
       });
       navigate(`/broadcasts/${res.data.id}`);
     } catch (err) {
@@ -235,6 +248,46 @@ export default function BroadcastComposer() {
           </div>
         )}
 
+        {/* 5. Send Mode */}
+        <div className="bg-white rounded-xl border border-gray-200 p-6">
+          <h2 className="text-sm font-semibold text-gray-900 mb-3">
+            {templateVars.length > 0 ? "5" : "4"}. 配信タイミング
+          </h2>
+          <div className="flex gap-4 mb-4">
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="radio"
+                name="sendMode"
+                value="now"
+                checked={sendMode === "now"}
+                onChange={() => setSendMode("now")}
+                className="text-indigo-600 focus:ring-indigo-500"
+              />
+              <span className="text-sm text-gray-700">今すぐ配信</span>
+            </label>
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="radio"
+                name="sendMode"
+                value="schedule"
+                checked={sendMode === "schedule"}
+                onChange={() => setSendMode("schedule")}
+                className="text-indigo-600 focus:ring-indigo-500"
+              />
+              <span className="text-sm text-gray-700">日時指定配信</span>
+            </label>
+          </div>
+          {sendMode === "schedule" && (
+            <input
+              type="datetime-local"
+              value={scheduledAt}
+              onChange={(e) => setScheduledAt(e.target.value)}
+              min={new Date().toISOString().slice(0, 16)}
+              className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            />
+          )}
+        </div>
+
         {/* Send Button */}
         <div className="flex justify-end">
           <button
@@ -242,8 +295,16 @@ export default function BroadcastComposer() {
             disabled={sending || !audienceId || !templateId || !fromAddressId}
             className="inline-flex items-center gap-2 px-6 py-3 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
-            <Send className="w-4 h-4" />
-            {sending ? "配信開始中..." : "配信開始"}
+            {sendMode === "schedule" ? (
+              <Clock className="w-4 h-4" />
+            ) : (
+              <Send className="w-4 h-4" />
+            )}
+            {sending
+              ? "処理中..."
+              : sendMode === "schedule"
+              ? "予約配信"
+              : "配信開始"}
           </button>
         </div>
       </div>

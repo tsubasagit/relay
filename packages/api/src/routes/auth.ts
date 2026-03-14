@@ -4,7 +4,9 @@ import { db } from "../db/client.js";
 import { users, sessions } from "../db/schema.js";
 import { generateId } from "../utils/id.js";
 import { getAuthUrl, getGoogleUser } from "../services/google-auth.js";
+import { autoSetup } from "../services/auto-setup.js";
 import { sessionAuth } from "../middleware/session.js";
+import { config } from "../config.js";
 
 const app = new Hono();
 
@@ -69,12 +71,19 @@ app.get("/google/callback", async (c) => {
       createdAt: new Date().toISOString(),
     });
 
+    // 自動セットアップ（初回ログイン時に組織・プロバイダー・送信アドレスを作成）
+    try {
+      await autoSetup(user.id, user.email, user.name);
+    } catch (err) {
+      console.error("Auto-setup error:", err);
+    }
+
     // Set cookie and redirect to dashboard
     const cookieOpts = "Path=/; HttpOnly; SameSite=Lax; Max-Age=2592000";
     return new Response(null, {
       status: 302,
       headers: {
-        Location: "/",
+        Location: config.dashboardUrl,
         "Set-Cookie": `relay_session=${sessionId}; ${cookieOpts}`,
       },
     });

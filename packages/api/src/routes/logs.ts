@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { desc, eq, and, gte, lte, sql } from "drizzle-orm";
 import { db } from "../db/client.js";
 import { emailLogs } from "../db/schema.js";
+import { getQuotaUsage } from "../services/mailer.js";
 import type { AuthContext } from "../middleware/combined-auth.js";
 
 const app = new Hono();
@@ -90,6 +91,13 @@ app.get("/stats", async (c) => {
       clickRate: sentCount > 0 ? (clicked.count / sentCount) * 100 : 0,
     },
   });
+});
+
+// Quota usage
+app.get("/quota", async (c) => {
+  const auth = c.get("auth" as never) as AuthContext;
+  const quota = await getQuotaUsage(auth.orgId);
+  return c.json({ data: quota });
 });
 
 export default app;

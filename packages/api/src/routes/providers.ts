@@ -6,6 +6,7 @@ import { emailProviders } from "../db/schema.js";
 import { generateId } from "../utils/id.js";
 import { encrypt, decrypt } from "../utils/crypto.js";
 import { createProvider } from "../services/providers/factory.js";
+import { hasDefaultProvider } from "../services/mailer.js";
 import type { AuthContext } from "../middleware/combined-auth.js";
 import type { ProviderType } from "../services/providers/types.js";
 
@@ -62,6 +63,27 @@ function maskConfig(type: string, config: Record<string, unknown>): Record<strin
   }
   return masked;
 }
+
+// Provider status (includes default provider info)
+app.get("/status", async (c) => {
+  const auth = c.get("auth" as never) as AuthContext;
+
+  const rows = await db
+    .select()
+    .from(emailProviders)
+    .where(eq(emailProviders.orgId, auth.orgId));
+
+  const hasCustomProvider = rows.length > 0;
+  const hasDefault = hasDefaultProvider();
+
+  return c.json({
+    data: {
+      hasCustomProvider,
+      hasDefaultProvider: hasDefault,
+      usingDefault: !hasCustomProvider && hasDefault,
+    },
+  });
+});
 
 // List providers
 app.get("/", async (c) => {

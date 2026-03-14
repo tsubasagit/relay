@@ -28,7 +28,7 @@ app.get("/", async (c) => {
       createdAt: sendingAddresses.createdAt,
     })
     .from(sendingAddresses)
-    .innerJoin(domains, eq(sendingAddresses.domainId, domains.id))
+    .leftJoin(domains, eq(sendingAddresses.domainId, domains.id))
     .where(eq(sendingAddresses.orgId, auth.orgId));
 
   return c.json({ data: rows });
@@ -46,7 +46,7 @@ app.post("/", async (c) => {
   // Extract domain from email
   const emailDomain = parsed.data.address.split("@")[1].toLowerCase();
 
-  // Find matching verified domain
+  // Find matching verified domain (optional — Gmail etc. won't have one)
   const [domain] = await db
     .select()
     .from(domains)
@@ -58,12 +58,6 @@ app.post("/", async (c) => {
       )
     )
     .limit(1);
-
-  if (!domain) {
-    return c.json({
-      error: `Domain ${emailDomain} is not verified. Register and verify the domain first.`,
-    }, 400);
-  }
 
   // Check uniqueness
   const [existing] = await db
@@ -84,7 +78,7 @@ app.post("/", async (c) => {
   await db.insert(sendingAddresses).values({
     id,
     orgId: auth.orgId,
-    domainId: domain.id,
+    domainId: domain?.id ?? null,
     address: parsed.data.address,
     displayName: parsed.data.displayName ?? null,
     createdAt: now,
@@ -95,9 +89,9 @@ app.post("/", async (c) => {
       id,
       address: parsed.data.address,
       displayName: parsed.data.displayName ?? null,
-      domainId: domain.id,
-      domain: domain.domain,
-      domainStatus: domain.status,
+      domainId: domain?.id ?? null,
+      domain: domain?.domain ?? null,
+      domainStatus: domain?.status ?? null,
       createdAt: now,
     },
   }, 201);

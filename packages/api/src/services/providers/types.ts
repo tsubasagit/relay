@@ -4,6 +4,7 @@ export interface SendOptions {
   subject: string;
   html: string;
   text?: string;
+  headers?: Record<string, string>;
 }
 
 export interface EmailProvider {
@@ -29,5 +30,10 @@ export interface SesConfig {
   region: string;
 }
 
-export type ProviderConfig = SmtpConfig | SendGridConfig | SesConfig;
-export type ProviderType = "smtp" | "sendgrid" | "ses";
+export interface GmailOAuthConfig {
+  email: string;
+  userId: string;
+}
+
+export type ProviderConfig = SmtpConfig | SendGridConfig | SesConfig | GmailOAuthConfig;
+export type ProviderType = "smtp" | "sendgrid" | "ses" | "gmail-oauth";

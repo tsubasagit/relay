@@ -19,6 +19,10 @@ import AudienceDetail from "./pages/AudienceDetail";
 import Broadcasts from "./pages/Broadcasts";
 import BroadcastComposer from "./pages/BroadcastComposer";
 import BroadcastDetail from "./pages/BroadcastDetail";
+import Webhooks from "./pages/Webhooks";
+import Compose from "./pages/Compose";
+import Lists from "./pages/Lists";
+import ListDetail from "./pages/ListDetail";
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, loading } = useAuthContext();
@@ -72,7 +76,10 @@ export default function App() {
         }
       >
         <Route path="/" element={<Dashboard />} />
+        <Route path="/compose" element={<Compose />} />
         <Route path="/contacts" element={<Contacts />} />
+        <Route path="/lists" element={<Lists />} />
+        <Route path="/lists/:id" element={<ListDetail />} />
         <Route path="/audiences" element={<Audiences />} />
         <Route path="/audiences/:id" element={<AudienceDetail />} />
         <Route path="/broadcasts" element={<Broadcasts />} />
@@ -88,6 +95,7 @@ export default function App() {
         <Route path="/settings/domains" element={<Domains />} />
         <Route path="/settings/addresses" element={<SendingAddresses />} />
         <Route path="/settings/providers" element={<Providers />} />
+        <Route path="/settings/webhooks" element={<Webhooks />} />
       </Route>
     </Routes>
   );

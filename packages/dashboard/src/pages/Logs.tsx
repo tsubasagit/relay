@@ -107,6 +107,11 @@ export default function Logs() {
                     </span>
                   </div>
                 </div>
+                {log.status === "failed" && log.errorMessage && (
+                  <p className="mt-1.5 text-xs text-red-600 bg-red-50 rounded px-2 py-1">
+                    {log.errorMessage}
+                  </p>
+                )}
                 <div className="flex items-center gap-4 mt-2 text-xs text-gray-400">
                   <span>
                     {new Date(log.createdAt).toLocaleString("ja-JP")}

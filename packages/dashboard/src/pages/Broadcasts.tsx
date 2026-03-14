@@ -5,6 +5,7 @@ import { broadcastsApi, type Broadcast } from "../lib/api";
 
 const statusLabels: Record<string, { label: string; className: string }> = {
   draft: { label: "下書き", className: "bg-gray-100 text-gray-700" },
+  scheduled: { label: "予約済", className: "bg-purple-100 text-purple-700" },
   sending: { label: "送信中", className: "bg-blue-100 text-blue-700" },
   completed: { label: "完了", className: "bg-green-100 text-green-700" },
   failed: { label: "失敗", className: "bg-red-100 text-red-700" },

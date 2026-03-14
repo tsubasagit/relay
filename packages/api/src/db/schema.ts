@@ -65,7 +65,7 @@ export const domains = sqliteTable("domains", {
 export const sendingAddresses = sqliteTable("sending_addresses", {
   id: text("id").primaryKey(),
   orgId: text("org_id").notNull().references(() => organizations.id),
-  domainId: text("domain_id").notNull().references(() => domains.id),
+  domainId: text("domain_id").references(() => domains.id),
   address: text("address").notNull(),
   displayName: text("display_name"),
   createdAt: text("created_at").notNull(),
@@ -79,7 +79,7 @@ export const emailProviders = sqliteTable("email_providers", {
   id: text("id").primaryKey(),
   orgId: text("org_id").notNull().references(() => organizations.id),
   name: text("name").notNull(),
-  type: text("type", { enum: ["smtp", "sendgrid", "ses"] }).notNull(),
+  type: text("type", { enum: ["smtp", "sendgrid", "ses", "gmail-oauth"] }).notNull(),
   config: text("config").notNull(), // AES-256-GCM encrypted JSON
   isDefault: integer("is_default", { mode: "boolean" }).notNull().default(false),
   createdAt: text("created_at").notNull(),
@@ -130,6 +130,7 @@ export const emailLogs = sqliteTable("email_logs", {
   })
     .notNull()
     .default("queued"),
+  errorMessage: text("error_message"),
   openedAt: text("opened_at"),
   clickedAt: text("clicked_at"),
   clickedUrl: text("clicked_url"),
@@ -180,8 +181,9 @@ export const broadcasts = sqliteTable("broadcasts", {
   fromAddress: text("from_address").notNull(),
   subject: text("subject").notNull(),
   variables: text("variables", { mode: "json" }).$type<Record<string, string>>(),
+  scheduledAt: text("scheduled_at"),
   status: text("status", {
-    enum: ["draft", "sending", "completed", "failed"],
+    enum: ["draft", "scheduled", "sending", "completed", "failed"],
   }).notNull().default("draft"),
   totalCount: integer("total_count").notNull().default(0),
   sentCount: integer("sent_count").notNull().default(0),
@@ -190,6 +192,42 @@ export const broadcasts = sqliteTable("broadcasts", {
   createdAt: text("created_at").notNull(),
   completedAt: text("completed_at"),
 });
+
+// ─── Webhooks ───
+
+export const webhooks = sqliteTable("webhooks", {
+  id: text("id").primaryKey(),
+  orgId: text("org_id").notNull().references(() => organizations.id),
+  url: text("url").notNull(),
+  secret: text("secret").notNull(),
+  events: text("events", { mode: "json" }).notNull().$type<string[]>(),
+  isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
+  createdAt: text("created_at").notNull(),
+});
+
+export const webhookLogs = sqliteTable("webhook_logs", {
+  id: text("id").primaryKey(),
+  webhookId: text("webhook_id").notNull().references(() => webhooks.id),
+  orgId: text("org_id").notNull().references(() => organizations.id),
+  event: text("event").notNull(),
+  payload: text("payload", { mode: "json" }).notNull().$type<Record<string, unknown>>(),
+  statusCode: integer("status_code"),
+  response: text("response"),
+  success: integer("success", { mode: "boolean" }).notNull().default(false),
+  attempts: integer("attempts").notNull().default(1),
+  createdAt: text("created_at").notNull(),
+});
+
+// ─── Email Quota ───
+
+export const emailQuota = sqliteTable("email_quota", {
+  id: text("id").primaryKey(),
+  orgId: text("org_id").notNull().references(() => organizations.id),
+  date: text("date").notNull(), // YYYY-MM-DD
+  sentCount: integer("sent_count").notNull().default(0),
+}, (table) => [
+  uniqueIndex("email_quota_org_date_idx").on(table.orgId, table.date),
+]);
 
 export const audienceContacts = sqliteTable("audience_contacts", {
   audienceId: text("audience_id")

@@ -3,6 +3,8 @@ import { eq, and } from "drizzle-orm";
 import { db } from "../db/client.js";
 import { unsubscribes } from "../db/schema.js";
 import { generateId } from "../utils/id.js";
+import { dispatchWebhookEvent } from "../services/webhook-dispatcher.js";
+import { buildUnsubscribePayload } from "../services/webhook-events.js";
 
 const app = new Hono();
 
@@ -59,7 +61,7 @@ app.get("/:token", async (c) => {
   return c.html(html);
 });
 
-// Process unsubscribe (POST)
+// RFC 8058 one-click unsubscribe (POST with List-Unsubscribe=One-Click body)
 app.post("/:token", async (c) => {
   const parsed = decodeToken(c.req.param("token"));
   if (!parsed) {
@@ -67,8 +69,11 @@ app.post("/:token", async (c) => {
   }
 
   const { orgId, email } = parsed;
+
+  // Detect RFC 8058 one-click request (Content-Type: application/x-www-form-urlencoded with List-Unsubscribe=One-Click)
   const formData = await c.req.parseBody();
-  const reason = (formData.reason as string) || null;
+  const isOneClick = formData["List-Unsubscribe"] === "One-Click";
+  const reason = isOneClick ? null : ((formData.reason as string) || null);
 
   // Check if already unsubscribed
   const [existing] = await db
@@ -86,6 +91,17 @@ app.post("/:token", async (c) => {
       source: "link",
       unsubscribedAt: new Date().toISOString(),
     });
+
+    dispatchWebhookEvent(
+      orgId,
+      "contact.unsubscribed",
+      buildUnsubscribePayload(orgId, { email, reason, source: "link" })
+    );
+  }
+
+  // RFC 8058: Return 200 for one-click requests
+  if (isOneClick) {
+    return c.text("Unsubscribed", 200);
   }
 
   const html = `<!DOCTYPE html>

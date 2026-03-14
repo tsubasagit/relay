@@ -115,6 +115,7 @@ export function initDatabase(): void {
       to_address TEXT NOT NULL,
       subject TEXT NOT NULL,
       status TEXT NOT NULL DEFAULT 'queued',
+      error_message TEXT,
       opened_at TEXT,
       clicked_at TEXT,
       clicked_url TEXT,
@@ -176,7 +177,82 @@ export function initDatabase(): void {
       added_at TEXT NOT NULL,
       PRIMARY KEY (audience_id, contact_id)
     );
+
+    CREATE TABLE IF NOT EXISTS webhooks (
+      id TEXT PRIMARY KEY,
+      org_id TEXT NOT NULL REFERENCES organizations(id),
+      url TEXT NOT NULL,
+      secret TEXT NOT NULL,
+      events TEXT NOT NULL DEFAULT '[]',
+      is_active INTEGER NOT NULL DEFAULT 1,
+      created_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS webhook_logs (
+      id TEXT PRIMARY KEY,
+      webhook_id TEXT NOT NULL REFERENCES webhooks(id),
+      org_id TEXT NOT NULL REFERENCES organizations(id),
+      event TEXT NOT NULL,
+      payload TEXT NOT NULL DEFAULT '{}',
+      status_code INTEGER,
+      response TEXT,
+      success INTEGER NOT NULL DEFAULT 0,
+      attempts INTEGER NOT NULL DEFAULT 1,
+      created_at TEXT NOT NULL
+    );
   `);
+
+  // ─── Email Quota ───
+  sqlite.exec(`
+    CREATE TABLE IF NOT EXISTS email_quota (
+      id TEXT PRIMARY KEY,
+      org_id TEXT NOT NULL REFERENCES organizations(id),
+      date TEXT NOT NULL,
+      sent_count INTEGER NOT NULL DEFAULT 0
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS email_quota_org_date_idx ON email_quota(org_id, date);
+  `);
+
+  // ─── Migrations for existing DBs ───
+  const migrations = [
+    "ALTER TABLE broadcasts ADD COLUMN scheduled_at TEXT",
+    "ALTER TABLE email_logs ADD COLUMN error_message TEXT",
+  ];
+
+  // Make domain_id nullable (SQLite doesn't support ALTER COLUMN, but new tables already have it nullable)
+  // For existing DBs, we recreate the table if needed via a migration
+  const domainIdMigrations = [
+    // SQLite workaround: create a new table, copy data, swap
+    `CREATE TABLE IF NOT EXISTS sending_addresses_new (
+      id TEXT PRIMARY KEY,
+      org_id TEXT NOT NULL REFERENCES organizations(id),
+      domain_id TEXT REFERENCES domains(id),
+      address TEXT NOT NULL,
+      display_name TEXT,
+      created_at TEXT NOT NULL
+    )`,
+    `INSERT OR IGNORE INTO sending_addresses_new SELECT * FROM sending_addresses`,
+    `DROP TABLE IF EXISTS sending_addresses`,
+    `ALTER TABLE sending_addresses_new RENAME TO sending_addresses`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS sending_addresses_org_address_idx ON sending_addresses(org_id, address)`,
+  ];
+
+  for (const sql of migrations) {
+    try {
+      sqlite.exec(sql);
+    } catch {
+      // Column/table already exists — ignore
+    }
+  }
+
+  // Run domain_id nullable migration
+  for (const sql of domainIdMigrations) {
+    try {
+      sqlite.exec(sql);
+    } catch {
+      // Migration step failed (already applied or table issue) — ignore
+    }
+  }
 
   console.log("Database initialized.");
 }

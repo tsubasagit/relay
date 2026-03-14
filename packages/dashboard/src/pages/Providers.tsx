@@ -8,6 +8,7 @@ import {
   XCircle,
   Star,
   Zap,
+  Shield,
 } from "lucide-react";
 import { providers as providersApi, type ProviderInfo, type CreateProvider } from "../lib/api";
 
@@ -20,9 +21,13 @@ export default function Providers() {
 
   // Create form state
   const [name, setName] = useState("");
-  const [type, setType] = useState<"smtp" | "sendgrid" | "ses">("smtp");
+  const [type, setType] = useState<"gmail" | "smtp" | "sendgrid" | "ses">("gmail");
   const [isDefault, setIsDefault] = useState(false);
   const [creating, setCreating] = useState(false);
+
+  // Gmail preset fields
+  const [gmailAddress, setGmailAddress] = useState("");
+  const [gmailAppPassword, setGmailAppPassword] = useState("");
 
   // SMTP fields
   const [smtpHost, setSmtpHost] = useState("");
@@ -55,6 +60,8 @@ export default function Providers() {
 
   function getConfig(): Record<string, unknown> {
     switch (type) {
+      case "gmail":
+        return { host: "smtp.gmail.com", port: 587, username: gmailAddress, password: gmailAppPassword };
       case "smtp":
         return { host: smtpHost, port: parseInt(smtpPort), username: smtpUser, password: smtpPass };
       case "sendgrid":
@@ -69,7 +76,8 @@ export default function Providers() {
     setCreating(true);
     setMessage(null);
     try {
-      const data: CreateProvider = { name, type, config: getConfig(), isDefault };
+      const apiType = type === "gmail" ? "smtp" : type;
+      const data: CreateProvider = { name, type: apiType, config: getConfig(), isDefault };
       await providersApi.create(data);
       loadProviders();
       setShowCreate(false);
@@ -84,8 +92,10 @@ export default function Providers() {
 
   function resetForm() {
     setName("");
-    setType("smtp");
+    setType("gmail");
     setIsDefault(false);
+    setGmailAddress("");
+    setGmailAppPassword("");
     setSmtpHost("");
     setSmtpPort("587");
     setSmtpUser("");
@@ -119,7 +129,7 @@ export default function Providers() {
     }
   }
 
-  const typeLabel = { smtp: "SMTP", sendgrid: "SendGrid", ses: "Amazon SES" };
+  const typeLabel: Record<string, string> = { smtp: "SMTP", sendgrid: "SendGrid", ses: "Amazon SES", "gmail-oauth": "Gmail（自動設定）" };
 
   if (loading) {
     return (
@@ -131,7 +141,12 @@ export default function Providers() {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold text-gray-900 mb-6">メールプロバイダー</h1>
+      <div className="mb-6">
+        <h1 className="text-2xl font-bold text-gray-900">メールプロバイダー</h1>
+        <p className="mt-1 text-sm text-gray-500">
+          メールの送信に使用するサービスを設定します。Googleログインで自動設定された Gmail は、そのまま利用できます。
+        </p>
+      </div>
 
       {message && (
         <div
@@ -166,7 +181,8 @@ export default function Providers() {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">タイプ</label>
-                <select value={type} onChange={(e) => setType(e.target.value as "smtp" | "sendgrid" | "ses")} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-indigo-500">
+                <select value={type} onChange={(e) => setType(e.target.value as "gmail" | "smtp" | "sendgrid" | "ses")} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-indigo-500">
+                  <option value="gmail">Gmail（おすすめ）</option>
                   <option value="smtp">SMTP</option>
                   <option value="sendgrid">SendGrid</option>
                   <option value="ses">Amazon SES</option>
@@ -179,6 +195,30 @@ export default function Providers() {
                 </label>
               </div>
             </div>
+
+            {type === "gmail" && (
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">メールアドレス</label>
+                    <input type="email" value={gmailAddress} onChange={(e) => setGmailAddress(e.target.value)} placeholder="your@gmail.com" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-indigo-500" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">アプリパスワード</label>
+                    <input type="password" value={gmailAppPassword} onChange={(e) => setGmailAppPassword(e.target.value)} placeholder="16文字のアプリパスワード" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm font-mono outline-none focus:ring-2 focus:ring-indigo-500" />
+                  </div>
+                </div>
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-sm text-blue-800">
+                  <p className="font-medium mb-2">アプリパスワードの取得方法:</p>
+                  <ol className="list-decimal list-inside space-y-1 text-blue-700">
+                    <li>Google アカウント設定を開く</li>
+                    <li>セキュリティ → 2段階認証を有効にする</li>
+                    <li>アプリパスワード →「メール」で生成</li>
+                    <li>生成された16文字を上に貼り付け</li>
+                  </ol>
+                </div>
+              </div>
+            )}
 
             {type === "smtp" && (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -262,9 +302,15 @@ export default function Providers() {
                           デフォルト
                         </span>
                       )}
+                      {p.type === "gmail-oauth" && (
+                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-xs bg-green-100 text-green-700 rounded font-medium">
+                          <Shield className="w-3 h-3" />
+                          Googleログインで自動設定済み
+                        </span>
+                      )}
                     </div>
                     <p className="text-xs text-gray-500">
-                      {typeLabel[p.type]}
+                      {typeLabel[p.type] ?? p.type}
                     </p>
                   </div>
                 </div>
@@ -281,12 +327,14 @@ export default function Providers() {
                     )}
                     テスト
                   </button>
-                  <button
-                    onClick={() => handleDelete(p.id)}
-                    className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
+                  {p.type !== "gmail-oauth" && (
+                    <button
+                      onClick={() => handleDelete(p.id)}
+                      className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  )}
                 </div>
               </div>
             ))}

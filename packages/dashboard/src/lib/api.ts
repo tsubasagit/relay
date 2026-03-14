@@ -5,16 +5,50 @@ let currentOrgId = localStorage.getItem("relay_org_id") || "";
 export function setOrgId(orgId: string) {
   currentOrgId = orgId;
   localStorage.setItem("relay_org_id", orgId);
+  // Org切替時にキャッシュを全クリア
+  requestCache.clear();
 }
 
 export function getOrgId(): string {
   return currentOrgId;
 }
 
+// ─── GET request cache (ページ遷移で同じデータを再取得しない) ───
+const CACHE_TTL = 30_000; // 30秒
+const requestCache = new Map<string, { data: unknown; expiry: number }>();
+
+function getCacheKey(path: string): string {
+  return `${currentOrgId}:${path}`;
+}
+
+/** POST/PUT/DELETE 後にキャッシュを無効化 */
+export function invalidateCache(pathPrefix?: string) {
+  if (!pathPrefix) {
+    requestCache.clear();
+    return;
+  }
+  const prefix = `${currentOrgId}:${pathPrefix}`;
+  for (const key of requestCache.keys()) {
+    if (key.startsWith(prefix)) requestCache.delete(key);
+  }
+}
+
 async function request<T>(
   path: string,
   options: RequestInit = {}
 ): Promise<T> {
+  const method = (options.method || "GET").toUpperCase();
+  const isGet = method === "GET";
+  const cacheKey = getCacheKey(path);
+
+  // GET はキャッシュを確認
+  if (isGet) {
+    const cached = requestCache.get(cacheKey);
+    if (cached && Date.now() < cached.expiry) {
+      return cached.data as T;
+    }
+  }
+
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
     ...(options.headers as Record<string, string>),
@@ -43,7 +77,17 @@ async function request<T>(
     throw new Error(body.error || `HTTP ${res.status}`);
   }
 
-  return res.json();
+  const data = await res.json() as T;
+
+  if (isGet) {
+    // GET レスポンスをキャッシュ
+    requestCache.set(cacheKey, { data, expiry: Date.now() + CACHE_TTL });
+  } else {
+    // 変更操作時はキャッシュ全クリア（次のGETで最新データを取得）
+    requestCache.clear();
+  }
+
+  return data;
 }
 
 // Auth-only requests (no X-Org-Id needed)
@@ -157,6 +201,7 @@ export const logs = {
     return request<{ data: EmailLog[]; total: number }>(`/logs${qs ? `?${qs}` : ""}`);
   },
   stats: () => request<{ data: Stats }>("/logs/stats"),
+  quota: () => request<{ data: QuotaUsage }>("/logs/quota"),
 };
 
 // ─── Providers ───
@@ -307,9 +352,70 @@ export const broadcastsApi = {
     templateId: string;
     fromAddressId: string;
     variables?: Record<string, string>;
+    scheduledAt?: string;
+  }) =>
+    request<{ data: { id: string; status: string; scheduledAt: string | null; totalCount: number; subject: string } }>(
+      "/broadcasts",
+      { method: "POST", body: JSON.stringify(data) }
+    ),
+  cancel: (id: string) =>
+    request<{ message: string }>(`/broadcasts/${id}/cancel`, { method: "POST" }),
+  quickSend: (data: {
+    contactIds: string[];
+    templateId: string;
+    fromAddressId: string;
+    variables?: Record<string, string>;
   }) =>
     request<{ data: { id: string; status: string; totalCount: number; subject: string } }>(
-      "/broadcasts",
+      "/broadcasts/quick-send",
+      { method: "POST", body: JSON.stringify(data) }
+    ),
+};
+
+// ─── Webhooks ───
+export const webhooksApi = {
+  list: () => request<{ data: WebhookInfo[] }>("/webhooks"),
+  get: (id: string) => request<{ data: WebhookDetail }>(`/webhooks/${id}`),
+  create: (data: { url: string; events: string[] }) =>
+    request<{ data: WebhookDetail & { secret: string }; message: string }>("/webhooks", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  update: (id: string, data: { url?: string; events?: string[]; isActive?: boolean }) =>
+    request<{ data: WebhookInfo }>(`/webhooks/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    }),
+  delete: (id: string) =>
+    request<{ message: string }>(`/webhooks/${id}`, { method: "DELETE" }),
+  logs: (id: string, params?: { limit?: number; offset?: number }) => {
+    const sp = new URLSearchParams();
+    if (params?.limit) sp.set("limit", String(params.limit));
+    if (params?.offset) sp.set("offset", String(params.offset));
+    const qs = sp.toString();
+    return request<{ data: WebhookLog[]; total: number }>(`/webhooks/${id}/logs${qs ? `?${qs}` : ""}`);
+  },
+  test: (id: string) =>
+    request<{ message: string }>(`/webhooks/${id}/test`, { method: "POST" }),
+  rotateSecret: (id: string) =>
+    request<{ data: { secret: string }; message: string }>(`/webhooks/${id}/rotate-secret`, {
+      method: "POST",
+    }),
+  events: () => request<{ data: string[] }>("/webhooks/meta/events"),
+};
+
+// ─── Compose ───
+export const compose = {
+  send: (data: {
+    contactIds: string[];
+    fromAddressId?: string;
+    templateId?: string;
+    subject?: string;
+    bodyHtml?: string;
+    variables?: Record<string, string>;
+  }) =>
+    request<{ data: { id: string; status: string; totalCount: number; subject: string } }>(
+      "/compose/send",
       { method: "POST", body: JSON.stringify(data) }
     ),
 };
@@ -403,6 +509,7 @@ export interface EmailLog {
   toAddress: string;
   subject: string;
   status: "queued" | "sent" | "bounced" | "failed";
+  errorMessage: string | null;
   openedAt: string | null;
   clickedAt: string | null;
   clickedUrl: string | null;
@@ -428,6 +535,12 @@ export interface Stats {
   clickRate: number;
 }
 
+export interface QuotaUsage {
+  used: number;
+  limit: number;
+  date: string;
+}
+
 export interface ApiKeyInfo {
   id: string;
   name: string;
@@ -440,7 +553,7 @@ export interface ApiKeyInfo {
 export interface ProviderInfo {
   id: string;
   name: string;
-  type: "smtp" | "sendgrid" | "ses";
+  type: "smtp" | "sendgrid" | "ses" | "gmail-oauth";
   config: Record<string, unknown>;
   isDefault: boolean;
   createdAt: string;
@@ -448,7 +561,7 @@ export interface ProviderInfo {
 
 export interface CreateProvider {
   name: string;
-  type: "smtp" | "sendgrid" | "ses";
+  type: "smtp" | "sendgrid" | "ses" | "gmail-oauth";
   config: Record<string, unknown>;
   isDefault?: boolean;
 }
@@ -472,9 +585,9 @@ export interface SendingAddress {
   id: string;
   address: string;
   displayName: string | null;
-  domainId: string;
-  domain: string;
-  domainStatus: string;
+  domainId: string | null;
+  domain: string | null;
+  domainStatus: string | null;
   createdAt: string;
 }
 
@@ -514,7 +627,8 @@ export interface Broadcast {
   templateId: string;
   fromAddress: string;
   subject: string;
-  status: "draft" | "sending" | "completed" | "failed";
+  scheduledAt: string | null;
+  status: "draft" | "scheduled" | "sending" | "completed" | "failed";
   totalCount: number;
   sentCount: number;
   failedCount: number;
@@ -530,4 +644,28 @@ export interface BroadcastDetail extends Broadcast {
   variables: Record<string, string> | null;
   templateName: string | null;
   logs: EmailLog[];
+}
+
+export interface WebhookInfo {
+  id: string;
+  url: string;
+  events: string[];
+  isActive: boolean;
+  createdAt: string;
+}
+
+export interface WebhookDetail extends WebhookInfo {
+  secret: string;
+}
+
+export interface WebhookLog {
+  id: string;
+  webhookId: string;
+  event: string;
+  payload: Record<string, unknown>;
+  statusCode: number | null;
+  response: string | null;
+  success: boolean;
+  attempts: number;
+  createdAt: string;
 }

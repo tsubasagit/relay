@@ -6,6 +6,8 @@ import {
   Clock,
   AlertTriangle,
   Loader2,
+  CalendarClock,
+  XCircle,
 } from "lucide-react";
 import { broadcastsApi, type BroadcastDetail as BroadcastDetailType } from "../lib/api";
 
@@ -18,6 +20,12 @@ const statusConfig: Record<
     icon: Clock,
     className: "text-gray-600",
     bgClass: "bg-gray-100",
+  },
+  scheduled: {
+    label: "予約済",
+    icon: CalendarClock,
+    className: "text-purple-600",
+    bgClass: "bg-purple-100",
   },
   sending: {
     label: "送信中",
@@ -44,6 +52,7 @@ export default function BroadcastDetail() {
   const navigate = useNavigate();
   const [broadcast, setBroadcast] = useState<BroadcastDetailType | null>(null);
   const [loading, setLoading] = useState(true);
+  const [cancelling, setCancelling] = useState(false);
   const pollingRef = useRef<ReturnType<typeof setInterval>>(undefined);
 
   async function load() {
@@ -78,6 +87,19 @@ export default function BroadcastDetail() {
       if (pollingRef.current) clearInterval(pollingRef.current);
     };
   }, [broadcast?.status]);
+
+  async function handleCancel() {
+    if (!id || !confirm("予約配信をキャンセルしますか？")) return;
+    setCancelling(true);
+    try {
+      await broadcastsApi.cancel(id);
+      await load();
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setCancelling(false);
+    }
+  }
 
   if (loading) {
     return (
@@ -142,7 +164,31 @@ export default function BroadcastDetail() {
             </span>
           </div>
         </div>
+
+        {broadcast.status === "scheduled" && (
+          <button
+            onClick={handleCancel}
+            disabled={cancelling}
+            className="inline-flex items-center gap-2 px-4 py-2 bg-red-50 text-red-600 border border-red-200 rounded-lg text-sm font-medium hover:bg-red-100 disabled:opacity-50 transition-colors"
+          >
+            <XCircle className="w-4 h-4" />
+            {cancelling ? "キャンセル中..." : "予約キャンセル"}
+          </button>
+        )}
       </div>
+
+      {/* Scheduled Info */}
+      {broadcast.scheduledAt && broadcast.status === "scheduled" && (
+        <div className="bg-purple-50 border border-purple-200 rounded-xl p-4 mb-6 flex items-center gap-3">
+          <CalendarClock className="w-5 h-5 text-purple-600" />
+          <div>
+            <p className="text-sm font-medium text-purple-900">予約配信</p>
+            <p className="text-sm text-purple-700">
+              {new Date(broadcast.scheduledAt).toLocaleString("ja-JP")} に配信予定
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Progress Bar */}
       <div className="bg-white rounded-xl border border-gray-200 p-6 mb-6">
@@ -212,9 +258,13 @@ export default function BroadcastDetail() {
             </dd>
           </div>
           <div>
-            <dt className="text-gray-500">完了日時</dt>
+            <dt className="text-gray-500">
+              {broadcast.scheduledAt ? "配信予定日時" : "完了日時"}
+            </dt>
             <dd className="text-gray-900 font-medium mt-0.5">
-              {broadcast.completedAt
+              {broadcast.scheduledAt && broadcast.status === "scheduled"
+                ? new Date(broadcast.scheduledAt).toLocaleString("ja-JP")
+                : broadcast.completedAt
                 ? new Date(broadcast.completedAt).toLocaleString("ja-JP")
                 : "-"}
             </dd>

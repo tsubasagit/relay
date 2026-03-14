@@ -5,6 +5,7 @@ import { decrypt } from "../../utils/crypto.js";
 import { SmtpProvider } from "./smtp.js";
 import { SendGridProvider } from "./sendgrid.js";
 import { SesProvider } from "./ses.js";
+import { GmailOAuthProvider } from "./gmail-oauth.js";
 import type { EmailProvider, ProviderType } from "./types.js";
 
 export function createProvider(type: ProviderType, configJson: string): EmailProvider {
@@ -17,6 +18,8 @@ export function createProvider(type: ProviderType, configJson: string): EmailPro
       return new SendGridProvider(config);
     case "ses":
       return new SesProvider(config);
+    case "gmail-oauth":
+      return new GmailOAuthProvider(config);
     default:
       throw new Error(`Unknown provider type: ${type}`);
   }
