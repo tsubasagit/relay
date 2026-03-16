@@ -27,7 +27,10 @@ COPY --from=builder /app/packages/api/package.json packages/api/
 COPY --from=builder /app/packages/sdk/package.json packages/sdk/
 COPY --from=builder /app/node_modules/ node_modules/
 COPY --from=builder /app/packages/api/dist/ packages/api/dist/
-COPY --from=builder /app/packages/api/node_modules/ packages/api/node_modules/ 2>/dev/null || true
+
+# Copy workspace-level node_modules if they exist
+RUN mkdir -p packages/api/node_modules
+COPY --from=builder /app/packages/sdk/ packages/sdk/
 
 ENV NODE_ENV=production
 ENV API_PORT=8080
