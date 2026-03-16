@@ -2,8 +2,8 @@ FROM node:22-slim AS builder
 
 WORKDIR /app
 
-# Copy root package files
-COPY package.json package-lock.json* ./
+# Copy root package files and tsconfig
+COPY package.json package-lock.json* tsconfig.base.json ./
 COPY packages/api/package.json packages/api/
 COPY packages/sdk/package.json packages/sdk/
 
