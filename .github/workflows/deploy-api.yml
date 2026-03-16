@@ -57,9 +57,12 @@ jobs:
             --min-instances=0 \
             --max-instances=3 \
             --set-env-vars="DATABASE_URL=${{ secrets.DATABASE_URL }}" \
-            --set-env-vars="API_BASE_URL=https://relay-api-$(echo ${{ env.PROJECT_ID }} | tr -d '-')-an.a.run.app" \
+            --set-env-vars="API_BASE_URL=https://relay-api-824939762247.asia-northeast1.run.app" \
             --set-env-vars="SESSION_SECRET=${{ secrets.SESSION_SECRET }}" \
             --set-env-vars="ENCRYPTION_KEY=${{ secrets.ENCRYPTION_KEY }}" \
+            --set-env-vars="GOOGLE_CLIENT_ID=${{ secrets.GOOGLE_CLIENT_ID }}" \
+            --set-env-vars="GOOGLE_CLIENT_SECRET=${{ secrets.GOOGLE_CLIENT_SECRET }}" \
+            --set-env-vars="GOOGLE_CALLBACK_URL=${{ secrets.GOOGLE_CALLBACK_URL }}" \
             --set-env-vars="DASHBOARD_URL=https://relay-email-ath.web.app" \
             --set-env-vars="NODE_ENV=production" \
             --project=${{ env.PROJECT_ID }} \
