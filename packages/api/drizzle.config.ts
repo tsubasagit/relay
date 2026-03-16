@@ -3,8 +3,8 @@ import { defineConfig } from "drizzle-kit";
 export default defineConfig({
   schema: "./src/db/schema.ts",
   out: "./src/db/migrations",
-  dialect: "sqlite",
+  dialect: "postgresql",
   dbCredentials: {
-    url: process.env.DATABASE_PATH || "./data/relay.db",
+    url: process.env.DATABASE_URL || "postgresql://localhost:5432/relay",
   },
 });

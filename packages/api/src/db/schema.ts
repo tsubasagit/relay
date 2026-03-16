@@ -1,8 +1,8 @@
-import { sqliteTable, text, integer, primaryKey, uniqueIndex } from "drizzle-orm/sqlite-core";
+import { pgTable, text, integer, boolean, primaryKey, uniqueIndex, jsonb } from "drizzle-orm/pg-core";
 
 // ─── Auth & Organization ───
 
-export const users = sqliteTable("users", {
+export const users = pgTable("users", {
   id: text("id").primaryKey(),
   googleId: text("google_id").notNull().unique(),
   email: text("email").notNull().unique(),
@@ -13,14 +13,14 @@ export const users = sqliteTable("users", {
   createdAt: text("created_at").notNull(),
 });
 
-export const sessions = sqliteTable("sessions", {
+export const sessions = pgTable("sessions", {
   id: text("id").primaryKey(),
   userId: text("user_id").notNull().references(() => users.id),
   expiresAt: text("expires_at").notNull(),
   createdAt: text("created_at").notNull(),
 });
 
-export const organizations = sqliteTable("organizations", {
+export const organizations = pgTable("organizations", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),
   slug: text("slug").notNull().unique(),
@@ -28,7 +28,7 @@ export const organizations = sqliteTable("organizations", {
   createdAt: text("created_at").notNull(),
 });
 
-export const orgMembers = sqliteTable("org_members", {
+export const orgMembers = pgTable("org_members", {
   id: text("id").primaryKey(),
   orgId: text("org_id").notNull().references(() => organizations.id),
   userId: text("user_id").notNull().references(() => users.id),
@@ -38,7 +38,7 @@ export const orgMembers = sqliteTable("org_members", {
   uniqueIndex("org_members_org_user_idx").on(table.orgId, table.userId),
 ]);
 
-export const orgInvitations = sqliteTable("org_invitations", {
+export const orgInvitations = pgTable("org_invitations", {
   id: text("id").primaryKey(),
   orgId: text("org_id").notNull().references(() => organizations.id),
   email: text("email").notNull(),
@@ -51,7 +51,7 @@ export const orgInvitations = sqliteTable("org_invitations", {
 
 // ─── Domains & Sending Addresses ───
 
-export const domains = sqliteTable("domains", {
+export const domains = pgTable("domains", {
   id: text("id").primaryKey(),
   orgId: text("org_id").notNull().references(() => organizations.id),
   domain: text("domain").notNull(),
@@ -62,12 +62,13 @@ export const domains = sqliteTable("domains", {
   uniqueIndex("domains_org_domain_idx").on(table.orgId, table.domain),
 ]);
 
-export const sendingAddresses = sqliteTable("sending_addresses", {
+export const sendingAddresses = pgTable("sending_addresses", {
   id: text("id").primaryKey(),
   orgId: text("org_id").notNull().references(() => organizations.id),
   domainId: text("domain_id").references(() => domains.id),
   address: text("address").notNull(),
   displayName: text("display_name"),
+  replyTo: text("reply_to"),
   createdAt: text("created_at").notNull(),
 }, (table) => [
   uniqueIndex("sending_addresses_org_address_idx").on(table.orgId, table.address),
@@ -75,47 +76,47 @@ export const sendingAddresses = sqliteTable("sending_addresses", {
 
 // ─── Email Providers ───
 
-export const emailProviders = sqliteTable("email_providers", {
+export const emailProviders = pgTable("email_providers", {
   id: text("id").primaryKey(),
   orgId: text("org_id").notNull().references(() => organizations.id),
   name: text("name").notNull(),
   type: text("type", { enum: ["smtp", "sendgrid", "ses", "gmail-oauth"] }).notNull(),
   config: text("config").notNull(), // AES-256-GCM encrypted JSON
-  isDefault: integer("is_default", { mode: "boolean" }).notNull().default(false),
+  isDefault: boolean("is_default").notNull().default(false),
   createdAt: text("created_at").notNull(),
 });
 
 // ─── Existing tables (with orgId) ───
 
-export const apiKeys = sqliteTable("api_keys", {
+export const apiKeys = pgTable("api_keys", {
   id: text("id").primaryKey(),
   orgId: text("org_id").notNull().references(() => organizations.id),
   name: text("name").notNull(),
   keyHash: text("key_hash").notNull(),
   keyPrefix: text("key_prefix").notNull(),
-  scopes: text("scopes", { mode: "json" }).notNull().$type<string[]>(),
-  isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
+  scopes: jsonb("scopes").notNull().$type<string[]>(),
+  isActive: boolean("is_active").notNull().default(true),
   createdBy: text("created_by").references(() => users.id),
   createdAt: text("created_at").notNull(),
 });
 
-export const templates = sqliteTable("templates", {
+export const templates = pgTable("templates", {
   id: text("id").primaryKey(),
   orgId: text("org_id").notNull().references(() => organizations.id),
   name: text("name").notNull(),
   subject: text("subject").notNull(),
   bodyHtml: text("body_html").notNull(),
   bodyText: text("body_text"),
-  variables: text("variables", { mode: "json" }).$type<string[]>().default([]),
+  variables: jsonb("variables").$type<string[]>().default([]),
   category: text("category", { enum: ["transactional", "marketing"] })
     .notNull()
     .default("transactional"),
-  isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
+  isActive: boolean("is_active").notNull().default(true),
   createdAt: text("created_at").notNull(),
   updatedAt: text("updated_at").notNull(),
 });
 
-export const emailLogs = sqliteTable("email_logs", {
+export const emailLogs = pgTable("email_logs", {
   id: text("id").primaryKey(),
   orgId: text("org_id").notNull().references(() => organizations.id),
   templateId: text("template_id").references(() => templates.id),
@@ -138,7 +139,7 @@ export const emailLogs = sqliteTable("email_logs", {
   createdAt: text("created_at").notNull(),
 });
 
-export const unsubscribes = sqliteTable("unsubscribes", {
+export const unsubscribes = pgTable("unsubscribes", {
   id: text("id").primaryKey(),
   orgId: text("org_id").notNull().references(() => organizations.id),
   email: text("email").notNull(),
@@ -151,19 +152,19 @@ export const unsubscribes = sqliteTable("unsubscribes", {
   uniqueIndex("unsubscribes_org_email_idx").on(table.orgId, table.email),
 ]);
 
-export const contacts = sqliteTable("contacts", {
+export const contacts = pgTable("contacts", {
   id: text("id").primaryKey(),
   orgId: text("org_id").notNull().references(() => organizations.id),
   email: text("email").notNull(),
   name: text("name"),
-  metadata: text("metadata", { mode: "json" }).$type<Record<string, string>>(),
-  isUnsubscribed: integer("is_unsubscribed", { mode: "boolean" }).notNull().default(false),
+  metadata: jsonb("metadata").$type<Record<string, string>>(),
+  isUnsubscribed: boolean("is_unsubscribed").notNull().default(false),
   createdAt: text("created_at").notNull(),
 }, (table) => [
   uniqueIndex("contacts_org_email_idx").on(table.orgId, table.email),
 ]);
 
-export const audiences = sqliteTable("audiences", {
+export const audiences = pgTable("audiences", {
   id: text("id").primaryKey(),
   orgId: text("org_id").notNull().references(() => organizations.id),
   name: text("name").notNull(),
@@ -172,7 +173,7 @@ export const audiences = sqliteTable("audiences", {
   createdAt: text("created_at").notNull(),
 });
 
-export const broadcasts = sqliteTable("broadcasts", {
+export const broadcasts = pgTable("broadcasts", {
   id: text("id").primaryKey(),
   orgId: text("org_id").notNull().references(() => organizations.id),
   audienceId: text("audience_id").notNull().references(() => audiences.id),
@@ -180,7 +181,7 @@ export const broadcasts = sqliteTable("broadcasts", {
   fromAddressId: text("from_address_id").notNull(),
   fromAddress: text("from_address").notNull(),
   subject: text("subject").notNull(),
-  variables: text("variables", { mode: "json" }).$type<Record<string, string>>(),
+  variables: jsonb("variables").$type<Record<string, string>>(),
   scheduledAt: text("scheduled_at"),
   status: text("status", {
     enum: ["draft", "scheduled", "sending", "completed", "failed"],
@@ -195,32 +196,32 @@ export const broadcasts = sqliteTable("broadcasts", {
 
 // ─── Webhooks ───
 
-export const webhooks = sqliteTable("webhooks", {
+export const webhooks = pgTable("webhooks", {
   id: text("id").primaryKey(),
   orgId: text("org_id").notNull().references(() => organizations.id),
   url: text("url").notNull(),
   secret: text("secret").notNull(),
-  events: text("events", { mode: "json" }).notNull().$type<string[]>(),
-  isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
+  events: jsonb("events").notNull().$type<string[]>(),
+  isActive: boolean("is_active").notNull().default(true),
   createdAt: text("created_at").notNull(),
 });
 
-export const webhookLogs = sqliteTable("webhook_logs", {
+export const webhookLogs = pgTable("webhook_logs", {
   id: text("id").primaryKey(),
   webhookId: text("webhook_id").notNull().references(() => webhooks.id),
   orgId: text("org_id").notNull().references(() => organizations.id),
   event: text("event").notNull(),
-  payload: text("payload", { mode: "json" }).notNull().$type<Record<string, unknown>>(),
+  payload: jsonb("payload").notNull().$type<Record<string, unknown>>(),
   statusCode: integer("status_code"),
   response: text("response"),
-  success: integer("success", { mode: "boolean" }).notNull().default(false),
+  success: boolean("success").notNull().default(false),
   attempts: integer("attempts").notNull().default(1),
   createdAt: text("created_at").notNull(),
 });
 
 // ─── Email Quota ───
 
-export const emailQuota = sqliteTable("email_quota", {
+export const emailQuota = pgTable("email_quota", {
   id: text("id").primaryKey(),
   orgId: text("org_id").notNull().references(() => organizations.id),
   date: text("date").notNull(), // YYYY-MM-DD
@@ -229,7 +230,7 @@ export const emailQuota = sqliteTable("email_quota", {
   uniqueIndex("email_quota_org_date_idx").on(table.orgId, table.date),
 ]);
 
-export const audienceContacts = sqliteTable("audience_contacts", {
+export const audienceContacts = pgTable("audience_contacts", {
   audienceId: text("audience_id")
     .notNull()
     .references(() => audiences.id),

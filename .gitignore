@@ -7,3 +7,5 @@ dist/
 *.log
 .DS_Store
 Thumbs.db
+.firebase/
+packages/api/data/

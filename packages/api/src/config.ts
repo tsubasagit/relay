@@ -8,7 +8,7 @@ dotenvConfig({ path: resolve(__dirname, "../../../.env") });
 export const config = {
   port: parseInt(process.env.API_PORT || "3456"),
   baseUrl: process.env.API_BASE_URL || "http://localhost:3456",
-  databasePath: process.env.DATABASE_PATH || "./data/relay.db",
+  databaseUrl: process.env.DATABASE_URL || "postgresql://localhost:5432/relay",
 
   // Google OAuth
   googleClientId: process.env.GOOGLE_CLIENT_ID || "",
@@ -22,7 +22,7 @@ export const config = {
   encryptionKey: process.env.ENCRYPTION_KEY || "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
 
   // Dashboard URL
-  dashboardUrl: process.env.DASHBOARD_URL || "http://localhost:5173",
+  dashboardUrl: process.env.DASHBOARD_URL || "http://localhost:5174",
 
   // Default SMTP provider (Gmail)
   defaultSmtpHost: process.env.RELAY_DEFAULT_SMTP_HOST || "smtp.gmail.com",
