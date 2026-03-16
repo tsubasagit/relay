@@ -1,4 +1,5 @@
-const API_BASE = "/api";
+const API_ORIGIN = import.meta.env.VITE_API_URL || "";
+const API_BASE = `${API_ORIGIN}/api`;
 
 let currentOrgId = localStorage.getItem("relay_org_id") || "";
 
@@ -95,7 +96,7 @@ async function authRequest<T>(
   path: string,
   options: RequestInit = {}
 ): Promise<T> {
-  const res = await fetch(path, {
+  const res = await fetch(`${API_ORIGIN}${path}`, {
     ...options,
     headers: {
       "Content-Type": "application/json",
@@ -242,12 +243,12 @@ export const domainsApi = {
 // ─── Sending Addresses ───
 export const sendingAddressesApi = {
   list: () => request<{ data: SendingAddress[] }>("/sending-addresses"),
-  create: (data: { address: string; displayName?: string }) =>
+  create: (data: { address: string; displayName?: string; replyTo?: string }) =>
     request<{ data: SendingAddress }>("/sending-addresses", {
       method: "POST",
       body: JSON.stringify(data),
     }),
-  update: (id: string, data: { displayName: string }) =>
+  update: (id: string, data: { displayName: string; replyTo?: string | null }) =>
     request<{ data: SendingAddress }>(`/sending-addresses/${id}`, {
       method: "PUT",
       body: JSON.stringify(data),
@@ -289,7 +290,7 @@ export const contactsApi = {
     formData.append("file", file);
     const headers: Record<string, string> = {};
     if (currentOrgId) headers["X-Org-Id"] = currentOrgId;
-    return fetch(`${API_BASE}/contacts/import`, {
+    return fetch(`${API_ORIGIN}/api/contacts/import`, {
       method: "POST",
       headers,
       credentials: "include",
@@ -585,6 +586,7 @@ export interface SendingAddress {
   id: string;
   address: string;
   displayName: string | null;
+  replyTo: string | null;
   domainId: string | null;
   domain: string | null;
   domainStatus: string | null;
