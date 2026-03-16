@@ -1,5 +1,4 @@
-const API_ORIGIN = import.meta.env.VITE_API_URL || "";
-const API_BASE = `${API_ORIGIN}/api`;
+const API_BASE = "/api";
 
 let currentOrgId = localStorage.getItem("relay_org_id") || "";
 
@@ -96,7 +95,7 @@ async function authRequest<T>(
   path: string,
   options: RequestInit = {}
 ): Promise<T> {
-  const res = await fetch(`${API_ORIGIN}${path}`, {
+  const res = await fetch(path, {
     ...options,
     headers: {
       "Content-Type": "application/json",
@@ -290,7 +289,7 @@ export const contactsApi = {
     formData.append("file", file);
     const headers: Record<string, string> = {};
     if (currentOrgId) headers["X-Org-Id"] = currentOrgId;
-    return fetch(`${API_ORIGIN}/api/contacts/import`, {
+    return fetch(`${API_BASE}/contacts/import`, {
       method: "POST",
       headers,
       credentials: "include",
