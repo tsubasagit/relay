@@ -24,6 +24,7 @@ export class SesProvider implements EmailProvider {
 
       let raw = `From: ${options.from}\r\n`;
       raw += `To: ${options.to}\r\n`;
+      if (options.replyTo) raw += `Reply-To: ${options.replyTo}\r\n`;
       raw += `Subject: ${options.subject}\r\n`;
       raw += `MIME-Version: 1.0\r\n`;
       raw += `${headerLines}\r\n`;
@@ -53,6 +54,7 @@ export class SesProvider implements EmailProvider {
       Destination: {
         ToAddresses: [options.to],
       },
+      ...(options.replyTo ? { ReplyToAddresses: [options.replyTo] } : {}),
       Message: {
         Subject: { Data: options.subject },
         Body: {

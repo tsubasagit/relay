@@ -11,6 +11,7 @@ const app = new Hono();
 const createAddressSchema = z.object({
   address: z.string().email(),
   displayName: z.string().optional(),
+  replyTo: z.string().email().optional(),
 });
 
 // List sending addresses
@@ -22,6 +23,7 @@ app.get("/", async (c) => {
       id: sendingAddresses.id,
       address: sendingAddresses.address,
       displayName: sendingAddresses.displayName,
+      replyTo: sendingAddresses.replyTo,
       domainId: sendingAddresses.domainId,
       domain: domains.domain,
       domainStatus: domains.status,
@@ -81,6 +83,7 @@ app.post("/", async (c) => {
     domainId: domain?.id ?? null,
     address: parsed.data.address,
     displayName: parsed.data.displayName ?? null,
+    replyTo: parsed.data.replyTo ?? null,
     createdAt: now,
   });
 
@@ -89,6 +92,7 @@ app.post("/", async (c) => {
       id,
       address: parsed.data.address,
       displayName: parsed.data.displayName ?? null,
+      replyTo: parsed.data.replyTo ?? null,
       domainId: domain?.id ?? null,
       domain: domain?.domain ?? null,
       domainStatus: domain?.status ?? null,
@@ -111,14 +115,22 @@ app.put("/:id", async (c) => {
   if (!existing) return c.json({ error: "Address not found" }, 404);
 
   const body = await c.req.json();
-  const parsed = z.object({ displayName: z.string().min(1) }).safeParse(body);
+  const parsed = z.object({
+    displayName: z.string().min(1),
+    replyTo: z.string().email().optional().nullable(),
+  }).safeParse(body);
   if (!parsed.success) {
     return c.json({ error: "Validation failed", details: parsed.error.flatten() }, 400);
   }
 
+  const updates: Record<string, string | null> = { displayName: parsed.data.displayName };
+  if (parsed.data.replyTo !== undefined) {
+    updates.replyTo = parsed.data.replyTo ?? null;
+  }
+
   await db
     .update(sendingAddresses)
-    .set({ displayName: parsed.data.displayName })
+    .set(updates)
     .where(eq(sendingAddresses.id, id));
 
   return c.json({ message: "Updated" });

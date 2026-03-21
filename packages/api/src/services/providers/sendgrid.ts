@@ -13,6 +13,7 @@ export class SendGridProvider implements EmailProvider {
       subject: options.subject,
       html: options.html,
       text: options.text || undefined,
+      replyTo: options.replyTo || undefined,
       headers: options.headers || undefined,
     });
   }

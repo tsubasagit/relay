@@ -159,8 +159,7 @@ export default function Compose() {
       });
       const msg = `${res.data.totalCount}件のメールを送信開始しました（${res.data.subject}）`;
       setSuccess(msg);
-      alert(`送信が成功しました！\n${msg}`);
-      navigate("/");
+      navigate(`/broadcasts/${res.data.id}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "送信に失敗しました");
     } finally {

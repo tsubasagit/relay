@@ -56,8 +56,19 @@ export class GmailOAuthProvider implements EmailProvider {
       },
     });
 
+    // Gmail は認証アカウントと異なる from を拒否/書き換えするため、
+    // from が認証ユーザーと異なる場合は replyTo に元アドレスを設定
+    const requestedFrom = options.from;
+    const requestedEmail = requestedFrom.includes("<")
+      ? requestedFrom.match(/<(.+)>/)?.[1] || requestedFrom
+      : requestedFrom;
+
+    const fromMismatch =
+      requestedEmail.toLowerCase() !== this.email.toLowerCase();
+
     await transporter.sendMail({
-      from: options.from,
+      from: fromMismatch ? this.email : options.from,
+      replyTo: fromMismatch ? requestedFrom : undefined,
       to: options.to,
       subject: options.subject,
       html: options.html,

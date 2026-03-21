@@ -4,6 +4,7 @@ export interface SendOptions {
   subject: string;
   html: string;
   text?: string;
+  replyTo?: string;
   headers?: Record<string, string>;
 }
 

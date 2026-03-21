@@ -42,6 +42,17 @@ export function startScheduler(): void {
           continue;
         }
 
+        // Fetch sending address for replyTo
+        let replyTo: string | undefined;
+        if (broadcast.fromAddressId) {
+          const [addr] = await db
+            .select({ replyTo: sendingAddresses.replyTo })
+            .from(sendingAddresses)
+            .where(eq(sendingAddresses.id, broadcast.fromAddressId))
+            .limit(1);
+          replyTo = addr?.replyTo || undefined;
+        }
+
         // Update status to sending
         await db
           .update(broadcasts)
@@ -61,7 +72,8 @@ export function startScheduler(): void {
             category: tmpl.category,
           },
           broadcast.fromAddress,
-          (broadcast.variables as Record<string, string>) || {}
+          (broadcast.variables as Record<string, string>) || {},
+          replyTo
         ).catch((err) => {
           console.error(`Scheduled broadcast ${broadcast.id} failed:`, err);
         });

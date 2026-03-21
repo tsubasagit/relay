@@ -27,7 +27,8 @@ export async function processBroadcast(
     category: string;
   },
   fromAddress: string,
-  variables: Record<string, string>
+  variables: Record<string, string>,
+  replyTo?: string
 ) {
   try {
     // Get all contacts in audience
@@ -114,6 +115,7 @@ export async function processBroadcast(
           subject,
           html,
           text,
+          replyTo,
           headers: emailHeaders,
         });
 

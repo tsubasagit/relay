@@ -156,6 +156,7 @@ app.post("/", async (c) => {
       id: sendingAddresses.id,
       address: sendingAddresses.address,
       displayName: sendingAddresses.displayName,
+      replyTo: sendingAddresses.replyTo,
       domainId: sendingAddresses.domainId,
       domainStatus: domains.status,
     })
@@ -176,6 +177,7 @@ app.post("/", async (c) => {
   const fromAddress = addr.displayName
     ? `${addr.displayName} <${addr.address}>`
     : addr.address;
+  const replyTo = addr.replyTo || undefined;
 
   // Render subject with variables
   const renderedSubject = renderTemplate(tmpl.subject, variables || {});
@@ -234,7 +236,8 @@ app.post("/", async (c) => {
         category: tmpl.category,
       },
       fromAddress,
-      variables || {}
+      variables || {},
+      replyTo
     ).catch((err) => {
       console.error(`Broadcast ${broadcastId} failed:`, err);
     });
@@ -279,6 +282,7 @@ app.post("/quick-send", async (c) => {
       id: sendingAddresses.id,
       address: sendingAddresses.address,
       displayName: sendingAddresses.displayName,
+      replyTo: sendingAddresses.replyTo,
       domainId: sendingAddresses.domainId,
       domainStatus: domains.status,
     })
@@ -294,6 +298,8 @@ app.post("/quick-send", async (c) => {
   if (addr.domainId && addr.domainStatus !== "verified") {
     return c.json({ error: "Domain is not verified" }, 400);
   }
+
+  const quickReplyTo = addr.replyTo || undefined;
 
   // Validate contacts exist and belong to org
   const validContacts = await db
@@ -368,7 +374,8 @@ app.post("/quick-send", async (c) => {
       category: tmpl.category,
     },
     fromAddr,
-    variables || {}
+    variables || {},
+    quickReplyTo
   ).catch((err) => {
     console.error(`Quick send broadcast ${broadcastId} failed:`, err);
   });

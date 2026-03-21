@@ -14,6 +14,7 @@ export default function SendingAddresses() {
   const [loading, setLoading] = useState(true);
   const [newAddress, setNewAddress] = useState("");
   const [displayName, setDisplayName] = useState("");
+  const [replyTo, setReplyTo] = useState("");
   const [adding, setAdding] = useState(false);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
@@ -40,9 +41,11 @@ export default function SendingAddresses() {
       await sendingAddressesApi.create({
         address: newAddress,
         displayName: displayName || undefined,
+        replyTo: replyTo || undefined,
       });
       setNewAddress("");
       setDisplayName("");
+      setReplyTo("");
       loadAddresses();
       setMessage({ type: "success", text: "送信アドレスを追加しました" });
     } catch (err) {
@@ -92,7 +95,7 @@ export default function SendingAddresses() {
         <p className="text-sm text-gray-500 mb-4">
           メールの「差出人」として表示されるアドレスです。Gmailアドレスはログイン時に自動登録されています。
         </p>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
               メールアドレス
@@ -114,6 +117,18 @@ export default function SendingAddresses() {
               value={displayName}
               onChange={(e) => setDisplayName(e.target.value)}
               placeholder="AppTalentHub"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Reply-To（任意）
+            </label>
+            <input
+              type="email"
+              value={replyTo}
+              onChange={(e) => setReplyTo(e.target.value)}
+              placeholder="info@example.com"
               className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
             />
           </div>
@@ -147,6 +162,7 @@ export default function SendingAddresses() {
                     </p>
                     <p className="text-xs text-gray-500">
                       {a.domainId === null ? "Gmail" : `ドメイン: ${a.domain}`}
+                      {a.replyTo && ` | Reply-To: ${a.replyTo}`}
                     </p>
                   </div>
                   <span
