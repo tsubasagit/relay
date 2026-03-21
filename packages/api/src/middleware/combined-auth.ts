@@ -51,7 +51,7 @@ export const combinedAuth = createMiddleware(async (c, next) => {
 
   // Try session cookie
   const cookieHeader = c.req.header("Cookie") || "";
-  const match = cookieHeader.match(/relay_session=([^;]+)/);
+  const match = cookieHeader.match(/__session=([^;]+)/);
   if (!match) {
     return c.json({ error: "Missing authentication" }, 401);
   }

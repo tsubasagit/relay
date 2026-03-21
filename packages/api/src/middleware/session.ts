@@ -12,7 +12,7 @@ export interface SessionUser {
 
 export const sessionAuth = createMiddleware(async (c, next) => {
   const cookieHeader = c.req.header("Cookie") || "";
-  const match = cookieHeader.match(/relay_session=([^;]+)/);
+  const match = cookieHeader.match(/__session=([^;]+)/);
   if (!match) {
     return c.json({ error: "Not authenticated" }, 401);
   }
