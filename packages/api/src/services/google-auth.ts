@@ -15,7 +15,7 @@ export function getAuthUrl(): string {
       "email",
       "profile",
       "https://www.googleapis.com/auth/directory.readonly",
-      "https://www.googleapis.com/auth/gmail.send",
+      "https://mail.google.com/",
     ],
     prompt: "consent",
   });
