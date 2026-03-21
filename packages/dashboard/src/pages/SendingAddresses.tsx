@@ -149,7 +149,7 @@ export default function SendingAddresses() {
           Gmail OAuth で別アドレスから送信するには
         </h2>
         <p className="text-sm text-blue-800 mb-3">
-          Gmail OAuth 認証を使用している場合、From アドレスは認証アカウントのアドレスに書き換えられます。
+          Google Workspace のアカウントで Gmail OAuth 認証を使用している場合、From アドレスは認証アカウントのアドレスに書き換えられます。
           別のアドレス（例: メルマガ用）を From に設定するには、Google Workspace Admin でエイリアスを登録してください。
         </p>
         <ol className="text-sm text-blue-800 space-y-1.5 list-decimal list-inside">
