@@ -143,6 +143,32 @@ export default function SendingAddresses() {
         </button>
       </div>
 
+      {/* Gmail エイリアス設定ガイド */}
+      <div className="bg-blue-50 border border-blue-200 rounded-xl p-6 mb-6">
+        <h2 className="text-lg font-semibold text-blue-900 mb-2">
+          Gmail OAuth で別アドレスから送信するには
+        </h2>
+        <p className="text-sm text-blue-800 mb-3">
+          Gmail OAuth 認証を使用している場合、From アドレスは認証アカウントのアドレスに書き換えられます。
+          別のアドレス（例: メルマガ用）を From に設定するには、Google Workspace Admin でエイリアスを登録してください。
+        </p>
+        <ol className="text-sm text-blue-800 space-y-1.5 list-decimal list-inside">
+          <li>
+            <a href="https://admin.google.com/" target="_blank" rel="noopener noreferrer" className="underline font-medium hover:text-blue-600">
+              Google Admin Console
+            </a>
+            {" "}にログイン
+          </li>
+          <li><strong>ディレクトリ</strong> → <strong>ユーザー</strong> → 認証に使用しているユーザーを選択</li>
+          <li><strong>ユーザー情報</strong> → <strong>予備のメールアドレス（メールエイリアス）</strong> を展開</li>
+          <li>送信に使いたいアドレス（例: <code className="bg-blue-100 px-1 rounded">mailmagazin@apptalenthub.co.jp</code>）を追加</li>
+          <li>追加後、上のフォームから同じアドレスを送信アドレスとして登録</li>
+        </ol>
+        <p className="text-xs text-blue-600 mt-3">
+          ※ エイリアス設定が反映されるまで最大24時間かかる場合があります
+        </p>
+      </div>
+
       {/* Address List */}
       <div className="bg-white rounded-xl border border-gray-200 p-6">
         <h2 className="text-lg font-semibold text-gray-900 mb-4">
