@@ -197,29 +197,44 @@ app.post("/send", async (c) => {
     createdAt: nowStr,
   });
 
-  // 非同期で送信開始
-  processBroadcast(
-    auth.orgId,
-    broadcastId,
-    audienceId,
-    {
-      id: tmpl.id,
-      subject: tmpl.subject,
-      bodyHtml: tmpl.bodyHtml,
-      bodyText: tmpl.bodyText,
-      category: tmpl.category,
-    },
-    fromAddr,
-    variables || {}
-  ).catch((err) => {
+  // 送信完了まで待機（Cloud Runはレスポンス後にシャットダウンするため）
+  try {
+    await processBroadcast(
+      auth.orgId,
+      broadcastId,
+      audienceId,
+      {
+        id: tmpl.id,
+        subject: tmpl.subject,
+        bodyHtml: tmpl.bodyHtml,
+        bodyText: tmpl.bodyText,
+        category: tmpl.category,
+      },
+      fromAddr,
+      variables || {}
+    );
+  } catch (err) {
     console.error(`Compose broadcast ${broadcastId} failed:`, err);
-  });
+  }
+
+  // 最新のbroadcastステータスを取得して返す
+  const [result] = await db
+    .select({
+      status: broadcasts.status,
+      sentCount: broadcasts.sentCount,
+      failedCount: broadcasts.failedCount,
+    })
+    .from(broadcasts)
+    .where(eq(broadcasts.id, broadcastId))
+    .limit(1);
 
   return c.json({
     data: {
       id: broadcastId,
-      status: "sending",
+      status: result?.status || "sending",
       totalCount: validContacts.length,
+      sentCount: result?.sentCount || 0,
+      failedCount: result?.failedCount || 0,
       subject: renderedSubject,
     },
   }, 201);

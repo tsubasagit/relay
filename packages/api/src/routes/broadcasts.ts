@@ -222,25 +222,35 @@ app.post("/", async (c) => {
     subject: renderedSubject,
   };
 
-  // If not scheduled, start processing immediately
+  // If not scheduled, process synchronously (Cloud Run shuts down after response)
   if (!isScheduled) {
-    processBroadcast(
-      auth.orgId,
-      broadcastId,
-      audienceId,
-      {
-        id: tmpl.id,
-        subject: tmpl.subject,
-        bodyHtml: tmpl.bodyHtml,
-        bodyText: tmpl.bodyText,
-        category: tmpl.category,
-      },
-      fromAddress,
-      variables || {},
-      replyTo
-    ).catch((err) => {
+    try {
+      await processBroadcast(
+        auth.orgId,
+        broadcastId,
+        audienceId,
+        {
+          id: tmpl.id,
+          subject: tmpl.subject,
+          bodyHtml: tmpl.bodyHtml,
+          bodyText: tmpl.bodyText,
+          category: tmpl.category,
+        },
+        fromAddress,
+        variables || {},
+        replyTo
+      );
+    } catch (err) {
       console.error(`Broadcast ${broadcastId} failed:`, err);
-    });
+    }
+
+    const [result] = await db
+      .select({ status: broadcasts.status, sentCount: broadcasts.sentCount, failedCount: broadcasts.failedCount })
+      .from(broadcasts)
+      .where(eq(broadcasts.id, broadcastId))
+      .limit(1);
+
+    responseData.status = result?.status || responseData.status;
   }
 
   return c.json({ data: responseData }, 201);
@@ -361,30 +371,40 @@ app.post("/quick-send", async (c) => {
     createdAt: nowStr,
   });
 
-  // Start processing
-  processBroadcast(
-    auth.orgId,
-    broadcastId,
-    audienceId,
-    {
-      id: tmpl.id,
-      subject: tmpl.subject,
-      bodyHtml: tmpl.bodyHtml,
-      bodyText: tmpl.bodyText,
-      category: tmpl.category,
-    },
-    fromAddr,
-    variables || {},
-    quickReplyTo
-  ).catch((err) => {
+  // Process synchronously (Cloud Run shuts down after response)
+  try {
+    await processBroadcast(
+      auth.orgId,
+      broadcastId,
+      audienceId,
+      {
+        id: tmpl.id,
+        subject: tmpl.subject,
+        bodyHtml: tmpl.bodyHtml,
+        bodyText: tmpl.bodyText,
+        category: tmpl.category,
+      },
+      fromAddr,
+      variables || {},
+      quickReplyTo
+    );
+  } catch (err) {
     console.error(`Quick send broadcast ${broadcastId} failed:`, err);
-  });
+  }
+
+  const [result] = await db
+    .select({ status: broadcasts.status, sentCount: broadcasts.sentCount, failedCount: broadcasts.failedCount })
+    .from(broadcasts)
+    .where(eq(broadcasts.id, broadcastId))
+    .limit(1);
 
   return c.json({
     data: {
       id: broadcastId,
-      status: "sending",
+      status: result?.status || "sending",
       totalCount: validContacts.length,
+      sentCount: result?.sentCount || 0,
+      failedCount: result?.failedCount || 0,
       subject: renderedSubject,
     },
   }, 201);
