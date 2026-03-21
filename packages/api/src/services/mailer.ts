@@ -1,4 +1,4 @@
-import { eq, and } from "drizzle-orm";
+import { eq, and, isNotNull } from "drizzle-orm";
 import { db } from "../db/client.js";
 import { emailQuota, organizations, orgMembers, users } from "../db/schema.js";
 import { generateId } from "../utils/id.js";
@@ -132,7 +132,8 @@ export async function sendMail(orgId: string, options: SendOptions): Promise<voi
     .where(
       and(
         eq(orgMembers.orgId, orgId),
-        eq(orgMembers.role, "admin")
+        eq(orgMembers.role, "admin"),
+        isNotNull(users.googleRefreshToken)
       )
     )
     .limit(1);
