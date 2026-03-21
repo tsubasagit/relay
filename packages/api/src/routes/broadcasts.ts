@@ -1,12 +1,11 @@
 import { Hono } from "hono";
 import { z } from "zod";
-import { eq, and, desc, sql, inArray } from "drizzle-orm";
+import { eq, and, desc, sql } from "drizzle-orm";
 import { db } from "../db/client.js";
 import {
   broadcasts,
   audiences,
   audienceContacts,
-  contacts,
   templates,
   sendingAddresses,
   domains,
@@ -15,6 +14,7 @@ import {
 import { generateId } from "../utils/id.js";
 import { renderTemplate } from "../services/template.js";
 import { processBroadcast } from "../services/broadcast-processor.js";
+import { getContactsByIds } from "../services/contacts-firestore.js";
 import type { AuthContext } from "../middleware/combined-auth.js";
 
 const app = new Hono();
@@ -311,11 +311,9 @@ app.post("/quick-send", async (c) => {
 
   const quickReplyTo = addr.replyTo || undefined;
 
-  // Validate contacts exist and belong to org
-  const validContacts = await db
-    .select({ id: contacts.id })
-    .from(contacts)
-    .where(and(eq(contacts.orgId, auth.orgId), inArray(contacts.id, contactIds)));
+  // Validate contacts exist in Firestore
+  const validContactsFull = await getContactsByIds(auth.orgId, contactIds);
+  const validContacts = validContactsFull.map((ct) => ({ id: ct.id }));
 
   if (validContacts.length === 0) {
     return c.json({ error: "No valid contacts found" }, 400);

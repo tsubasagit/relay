@@ -2,8 +2,9 @@ import { Hono } from "hono";
 import { z } from "zod";
 import { eq, and, sql, desc } from "drizzle-orm";
 import { db } from "../db/client.js";
-import { audiences, audienceContacts, contacts } from "../db/schema.js";
+import { audiences, audienceContacts } from "../db/schema.js";
 import { generateId } from "../utils/id.js";
+import { getContact, getContactsByIds } from "../services/contacts-firestore.js";
 import type { AuthContext } from "../middleware/combined-auth.js";
 
 const app = new Hono();
@@ -38,17 +39,10 @@ app.get("/:id", async (c) => {
     return c.json({ error: "Audience not found" }, 404);
   }
 
-  const members = await db
-    .select({
-      id: contacts.id,
-      email: contacts.email,
-      name: contacts.name,
-      isUnsubscribed: contacts.isUnsubscribed,
-      createdAt: contacts.createdAt,
-      addedAt: audienceContacts.addedAt,
-    })
+  // Get paginated contactIds from PG
+  const acRows = await db
+    .select({ contactId: audienceContacts.contactId, addedAt: audienceContacts.addedAt })
     .from(audienceContacts)
-    .innerJoin(contacts, eq(audienceContacts.contactId, contacts.id))
     .where(eq(audienceContacts.audienceId, id))
     .orderBy(desc(audienceContacts.addedAt))
     .limit(limit)
@@ -58,6 +52,26 @@ app.get("/:id", async (c) => {
     .select({ count: sql<number>`count(*)` })
     .from(audienceContacts)
     .where(eq(audienceContacts.audienceId, id));
+
+  // Batch-fetch contacts from Firestore
+  const contactIds = acRows.map((r) => r.contactId);
+  const contactsData = await getContactsByIds(auth.orgId, contactIds);
+  const contactMap = new Map(contactsData.map((ct) => [ct.id, ct]));
+
+  const members = acRows
+    .map((r) => {
+      const ct = contactMap.get(r.contactId);
+      if (!ct) return null;
+      return {
+        id: ct.id,
+        email: ct.email,
+        name: ct.name,
+        isUnsubscribed: ct.isUnsubscribed,
+        createdAt: ct.createdAt,
+        addedAt: r.addedAt,
+      };
+    })
+    .filter(Boolean);
 
   return c.json({ data: { ...audience, contacts: members }, total: count, limit, offset });
 });
@@ -181,13 +195,8 @@ app.post("/:id/contacts", async (c) => {
   let added = 0;
 
   for (const contactId of parsed.data.contactIds) {
-    // Verify contact belongs to org
-    const [contact] = await db
-      .select({ id: contacts.id })
-      .from(contacts)
-      .where(and(eq(contacts.id, contactId), eq(contacts.orgId, auth.orgId)))
-      .limit(1);
-
+    // Verify contact exists in Firestore
+    const contact = await getContact(auth.orgId, contactId);
     if (!contact) continue;
 
     // Check if already in audience

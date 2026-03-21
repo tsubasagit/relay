@@ -3,10 +3,10 @@ import { db } from "../db/client.js";
 import {
   broadcasts,
   audienceContacts,
-  contacts,
   emailLogs,
   unsubscribes,
 } from "../db/schema.js";
+import { getContactsByIds } from "./contacts-firestore.js";
 import { generateId } from "../utils/id.js";
 import { sendMail } from "./mailer.js";
 import { renderTemplate } from "./template.js";
@@ -31,17 +31,14 @@ export async function processBroadcast(
   replyTo?: string
 ) {
   try {
-    // Get all contacts in audience
-    const members = await db
-      .select({
-        id: contacts.id,
-        email: contacts.email,
-        name: contacts.name,
-        isUnsubscribed: contacts.isUnsubscribed,
-      })
+    // Get contactIds from PG, then batch-fetch from Firestore
+    const acRows = await db
+      .select({ contactId: audienceContacts.contactId })
       .from(audienceContacts)
-      .innerJoin(contacts, eq(audienceContacts.contactId, contacts.id))
       .where(eq(audienceContacts.audienceId, audienceId));
+
+    const contactIds = acRows.map((r) => r.contactId);
+    const members = await getContactsByIds(orgId, contactIds);
 
     // Get unsubscribed emails for this org
     const unsubs = await db

@@ -235,8 +235,7 @@ export const audienceContacts = pgTable("audience_contacts", {
     .notNull()
     .references(() => audiences.id),
   contactId: text("contact_id")
-    .notNull()
-    .references(() => contacts.id),
+    .notNull(),
   addedAt: text("added_at").notNull(),
 }, (table) => [
   primaryKey({ columns: [table.audienceId, table.contactId] }),

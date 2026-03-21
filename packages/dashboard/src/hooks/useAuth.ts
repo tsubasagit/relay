@@ -60,7 +60,6 @@ export function useAuth(): AuthState {
     setUser(null);
     setOrgsData([]);
     setCurrentOrg(null);
-    localStorage.removeItem("relay_org_id");
     window.location.href = "/login";
   }, []);
 

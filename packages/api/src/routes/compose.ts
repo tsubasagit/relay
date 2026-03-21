@@ -1,21 +1,20 @@
 import { Hono } from "hono";
 import { z } from "zod";
-import { eq, and, inArray, sql } from "drizzle-orm";
+import { eq, and, sql } from "drizzle-orm";
 import { db } from "../db/client.js";
 import {
-  contacts,
   templates,
   sendingAddresses,
   domains,
   audiences,
   audienceContacts,
   broadcasts,
-  emailLogs,
   emailQuota,
 } from "../db/schema.js";
 import { generateId } from "../utils/id.js";
 import { renderTemplate } from "../services/template.js";
 import { processBroadcast } from "../services/broadcast-processor.js";
+import { getContactsByIds } from "../services/contacts-firestore.js";
 import type { AuthContext } from "../middleware/combined-auth.js";
 
 const app = new Hono();
@@ -138,11 +137,9 @@ app.post("/send", async (c) => {
     }, 429);
   }
 
-  // コンタクト検証
-  const validContacts = await db
-    .select({ id: contacts.id })
-    .from(contacts)
-    .where(and(eq(contacts.orgId, auth.orgId), inArray(contacts.id, contactIds)));
+  // コンタクト検証（Firestore）
+  const validContactsFull = await getContactsByIds(auth.orgId, contactIds);
+  const validContacts = validContactsFull.map((ct) => ({ id: ct.id }));
 
   if (validContacts.length === 0) {
     return c.json({ error: "有効なコンタクトが見つかりません" }, 400);

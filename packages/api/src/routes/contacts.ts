@@ -1,9 +1,18 @@
 import { Hono } from "hono";
 import { z } from "zod";
-import { eq, and, or, like, sql, desc } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { db } from "../db/client.js";
-import { contacts, audienceContacts, audiences, users } from "../db/schema.js";
-import { generateId } from "../utils/id.js";
+import { users } from "../db/schema.js";
+import {
+  listContacts,
+  getContact,
+  createContact,
+  updateContact,
+  deleteContact,
+  importContacts,
+} from "../services/contacts-firestore.js";
+import { audienceContacts, audiences } from "../db/schema.js";
+import { sql } from "drizzle-orm";
 import { fetchGoogleWorkspaceContacts } from "../services/google-contacts.js";
 import type { AuthContext } from "../middleware/combined-auth.js";
 
@@ -22,32 +31,8 @@ app.get("/", async (c) => {
   const limit = Math.min(parseInt(c.req.query("limit") || "50"), 200);
   const offset = parseInt(c.req.query("offset") || "0");
 
-  const conditions = [eq(contacts.orgId, auth.orgId)];
-  if (search) {
-    conditions.push(
-      or(
-        like(contacts.email, `%${search}%`),
-        like(contacts.name, `%${search}%`)
-      )!
-    );
-  }
-
-  const where = and(...conditions);
-
-  const rows = await db
-    .select()
-    .from(contacts)
-    .where(where)
-    .orderBy(desc(contacts.createdAt))
-    .limit(limit)
-    .offset(offset);
-
-  const [{ count }] = await db
-    .select({ count: sql<number>`count(*)` })
-    .from(contacts)
-    .where(where);
-
-  return c.json({ data: rows, total: count, limit, offset });
+  const result = await listContacts(auth.orgId, { search, limit, offset });
+  return c.json({ data: result.data, total: result.total, limit, offset });
 });
 
 // Get single contact
@@ -55,16 +40,10 @@ app.get("/:id", async (c) => {
   const auth = c.get("auth" as never) as AuthContext;
   const id = c.req.param("id");
 
-  const [contact] = await db
-    .select()
-    .from(contacts)
-    .where(and(eq(contacts.id, id), eq(contacts.orgId, auth.orgId)))
-    .limit(1);
-
+  const contact = await getContact(auth.orgId, id);
   if (!contact) {
     return c.json({ error: "Contact not found" }, 404);
   }
-
   return c.json({ data: contact });
 });
 
@@ -77,32 +56,19 @@ app.post("/", async (c) => {
     return c.json({ error: "Validation failed", details: parsed.error.flatten() }, 400);
   }
 
-  // Check duplicate
-  const [existing] = await db
-    .select()
-    .from(contacts)
-    .where(and(eq(contacts.orgId, auth.orgId), eq(contacts.email, parsed.data.email)))
-    .limit(1);
-
-  if (existing) {
-    return c.json({ error: "Contact with this email already exists" }, 409);
+  try {
+    const contact = await createContact(auth.orgId, {
+      email: parsed.data.email,
+      name: parsed.data.name ?? null,
+      metadata: parsed.data.metadata ?? null,
+    });
+    return c.json({ data: contact }, 201);
+  } catch (err) {
+    if (err instanceof Error && err.message === "DUPLICATE") {
+      return c.json({ error: "Contact with this email already exists" }, 409);
+    }
+    throw err;
   }
-
-  const id = generateId("ct");
-  const now = new Date().toISOString();
-
-  await db.insert(contacts).values({
-    id,
-    orgId: auth.orgId,
-    email: parsed.data.email,
-    name: parsed.data.name ?? null,
-    metadata: parsed.data.metadata ?? null,
-    isUnsubscribed: false,
-    createdAt: now,
-  });
-
-  const [contact] = await db.select().from(contacts).where(eq(contacts.id, id)).limit(1);
-  return c.json({ data: contact }, 201);
 });
 
 // Update contact
@@ -122,26 +88,10 @@ app.put("/:id", async (c) => {
     return c.json({ error: "Validation failed", details: parsed.error.flatten() }, 400);
   }
 
-  const [existing] = await db
-    .select()
-    .from(contacts)
-    .where(and(eq(contacts.id, id), eq(contacts.orgId, auth.orgId)))
-    .limit(1);
-
-  if (!existing) {
+  const updated = await updateContact(auth.orgId, id, parsed.data);
+  if (!updated) {
     return c.json({ error: "Contact not found" }, 404);
   }
-
-  const updates: Record<string, unknown> = {};
-  if (parsed.data.email !== undefined) updates.email = parsed.data.email;
-  if (parsed.data.name !== undefined) updates.name = parsed.data.name;
-  if (parsed.data.metadata !== undefined) updates.metadata = parsed.data.metadata;
-
-  if (Object.keys(updates).length > 0) {
-    await db.update(contacts).set(updates).where(eq(contacts.id, id));
-  }
-
-  const [updated] = await db.select().from(contacts).where(eq(contacts.id, id)).limit(1);
   return c.json({ data: updated });
 });
 
@@ -150,37 +100,25 @@ app.delete("/:id", async (c) => {
   const auth = c.get("auth" as never) as AuthContext;
   const id = c.req.param("id");
 
-  const [existing] = await db
-    .select()
-    .from(contacts)
-    .where(and(eq(contacts.id, id), eq(contacts.orgId, auth.orgId)))
-    .limit(1);
-
-  if (!existing) {
+  const deleted = await deleteContact(auth.orgId, id);
+  if (!deleted) {
     return c.json({ error: "Contact not found" }, 404);
   }
 
-  // Get audience memberships to update counts
+  // Clean up audience_contacts in PostgreSQL
   const memberships = await db
     .select({ audienceId: audienceContacts.audienceId })
     .from(audienceContacts)
     .where(eq(audienceContacts.contactId, id));
 
-  // Delete from audience_contacts first
   await db.delete(audienceContacts).where(eq(audienceContacts.contactId, id));
 
-  // Update audience counts
   for (const m of memberships) {
     await db
       .update(audiences)
-      .set({
-        contactCount: sql`${audiences.contactCount} - 1`,
-      })
+      .set({ contactCount: sql`MAX(${audiences.contactCount} - 1, 0)` })
       .where(eq(audiences.id, m.audienceId));
   }
-
-  // Delete the contact
-  await db.delete(contacts).where(eq(contacts.id, id));
 
   return c.json({ message: "Contact deleted" });
 });
@@ -219,21 +157,13 @@ app.post("/import", async (c) => {
   }
   const nameIdx = headers.indexOf("name");
 
-  let imported = 0;
-  let skipped = 0;
-  const now = new Date().toISOString();
+  const items: { email: string; name: string | null; metadata: Record<string, string> | null }[] = [];
 
   for (let i = 1; i < lines.length; i++) {
     const values = lines[i].split(",").map((v) => v.trim().replace(/^"(.*)"$/, "$1"));
     const email = values[emailIdx];
-    if (!email || !email.includes("@")) {
-      skipped++;
-      continue;
-    }
-
     const name = nameIdx >= 0 ? values[nameIdx] || null : null;
 
-    // Build metadata from extra columns
     const metadata: Record<string, string> = {};
     headers.forEach((h, idx) => {
       if (idx !== emailIdx && idx !== nameIdx && values[idx]) {
@@ -241,31 +171,15 @@ app.post("/import", async (c) => {
       }
     });
 
-    // Check duplicate
-    const [existing] = await db
-      .select({ id: contacts.id })
-      .from(contacts)
-      .where(and(eq(contacts.orgId, auth.orgId), eq(contacts.email, email)))
-      .limit(1);
-
-    if (existing) {
-      skipped++;
-      continue;
-    }
-
-    await db.insert(contacts).values({
-      id: generateId("ct"),
-      orgId: auth.orgId,
+    items.push({
       email,
       name,
       metadata: Object.keys(metadata).length > 0 ? metadata : null,
-      isUnsubscribed: false,
-      createdAt: now,
     });
-    imported++;
   }
 
-  return c.json({ data: { imported, skipped, total: lines.length - 1 } });
+  const result = await importContacts(auth.orgId, items);
+  return c.json({ data: { ...result, total: lines.length - 1 } });
 });
 
 // Google Workspace Directory Import
@@ -276,7 +190,6 @@ app.post("/import/google", async (c) => {
     return c.json({ error: "Session auth required for Google import" }, 400);
   }
 
-  // Get user's Google tokens
   const [user] = await db
     .select({
       id: users.id,
@@ -300,7 +213,6 @@ app.post("/import/google", async (c) => {
         user.googleRefreshToken
       );
 
-    // Update stored access token if refreshed
     if (newAccessToken !== user.googleAccessToken) {
       await db
         .update(users)
@@ -308,42 +220,17 @@ app.post("/import/google", async (c) => {
         .where(eq(users.id, user.id));
     }
 
-    const now = new Date().toISOString();
-    let imported = 0;
-    let skipped = 0;
+    const items = googleContacts
+      .filter((gc) => gc.email)
+      .map((gc) => ({
+        email: gc.email!,
+        name: gc.name || null,
+        metadata: { source: "google_workspace" } as Record<string, string>,
+      }));
 
-    for (const gc of googleContacts) {
-      if (!gc.email) {
-        skipped++;
-        continue;
-      }
-
-      // Check duplicate
-      const [existing] = await db
-        .select({ id: contacts.id })
-        .from(contacts)
-        .where(and(eq(contacts.orgId, auth.orgId), eq(contacts.email, gc.email)))
-        .limit(1);
-
-      if (existing) {
-        skipped++;
-        continue;
-      }
-
-      await db.insert(contacts).values({
-        id: generateId("ct"),
-        orgId: auth.orgId,
-        email: gc.email,
-        name: gc.name,
-        metadata: { source: "google_workspace" },
-        isUnsubscribed: false,
-        createdAt: now,
-      });
-      imported++;
-    }
-
+    const result = await importContacts(auth.orgId, items);
     return c.json({
-      data: { imported, skipped, total: googleContacts.length },
+      data: { ...result, total: googleContacts.length },
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";

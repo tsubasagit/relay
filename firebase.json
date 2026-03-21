@@ -1,4 +1,7 @@
 {
+  "firestore": {
+    "rules": "firestore.rules"
+  },
   "hosting": {
     "public": "packages/dashboard/dist",
     "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
