@@ -79,7 +79,8 @@ app.get("/google/callback", async (c) => {
     }
 
     // Set cookie and redirect to dashboard
-    const cookieOpts = "Path=/; HttpOnly; SameSite=Lax; Max-Age=2592000";
+    const isProduction = config.baseUrl.startsWith("https");
+    const cookieOpts = `Path=/; HttpOnly; SameSite=Lax; Max-Age=2592000${isProduction ? "; Secure" : ""}`;
     return new Response(null, {
       status: 302,
       headers: {
@@ -111,7 +112,7 @@ app.post("/logout", async (c) => {
     status: 200,
     headers: {
       "Content-Type": "application/json",
-      "Set-Cookie": "relay_session=; Path=/; HttpOnly; Max-Age=0",
+      "Set-Cookie": `relay_session=; Path=/; HttpOnly; Max-Age=0${config.baseUrl.startsWith("https") ? "; Secure" : ""}`,
     },
   });
 });
