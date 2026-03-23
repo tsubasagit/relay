@@ -4,7 +4,6 @@ import {
   FileText,
   Send,
   BarChart3,
-  Mail,
   X,
   Globe,
   Server,
@@ -93,11 +92,9 @@ export function Sidebar({ open, onClose }: SidebarProps) {
       >
         <div className="flex items-center justify-between px-6 py-5 border-b border-gray-700">
           <div className="flex items-center gap-3">
-            <div className="p-2 bg-indigo-600 rounded-lg">
-              <Mail className="w-5 h-5" />
-            </div>
+            <img src="/icon.jpg" alt="TalentMail" className="w-9 h-9 rounded-lg" />
             <div>
-              <h1 className="text-lg font-bold">Relay</h1>
+              <h1 className="text-lg font-bold">TalentMail</h1>
               <p className="text-xs text-gray-400">
                 {isPro ? "メール配信管理" : "Gmailから始めるメール一斉配信"}
               </p>

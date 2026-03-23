@@ -23,7 +23,7 @@ export function Layout() {
               <Menu className="w-5 h-5" />
             </button>
             <h2 className="text-sm font-medium text-gray-900">
-              Relay Dashboard
+              TalentMail Dashboard
             </h2>
             <OrgSelector />
           </div>

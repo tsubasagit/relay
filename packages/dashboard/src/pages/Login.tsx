@@ -1,13 +1,9 @@
-import { Mail } from "lucide-react";
-
 export default function Login() {
   return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center">
       <div className="bg-white rounded-2xl border border-gray-200 p-8 w-full max-w-sm text-center">
-        <div className="inline-flex p-3 bg-indigo-600 rounded-xl mb-4">
-          <Mail className="w-8 h-8 text-white" />
-        </div>
-        <h1 className="text-2xl font-bold text-gray-900 mb-2">Relay</h1>
+        <img src="/icon.jpg" alt="TalentMail" className="w-16 h-16 rounded-xl mx-auto mb-4" />
+        <h1 className="text-2xl font-bold text-gray-900 mb-2">TalentMail</h1>
         <p className="text-sm text-gray-500 mb-6">
           メール配信管理ダッシュボード
         </p>
