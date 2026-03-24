@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { z } from "zod";
 import { eq, and, sql, desc } from "drizzle-orm";
 import { db } from "../db/client.js";
-import { audiences, audienceContacts } from "../db/schema.js";
+import { audiences, audienceContacts, broadcasts, emailLogs } from "../db/schema.js";
 import { generateId } from "../utils/id.js";
 import { getContact, getContactsByIds } from "../services/contacts-firestore.js";
 import type { AuthContext } from "../middleware/combined-auth.js";
@@ -161,6 +161,7 @@ app.delete("/:id", async (c) => {
   }
 
   await db.delete(audienceContacts).where(eq(audienceContacts.audienceId, id));
+  await db.delete(broadcasts).where(eq(broadcasts.audienceId, id));
   await db.delete(audiences).where(eq(audiences.id, id));
 
   return c.json({ message: "Audience deleted" });
