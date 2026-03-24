@@ -65,6 +65,7 @@ jobs:
             --set-env-vars="GOOGLE_CALLBACK_URL=${{ secrets.GOOGLE_CALLBACK_URL }}" \
             --set-env-vars="DASHBOARD_URL=https://relay-email-ath.web.app" \
             --set-env-vars="NODE_ENV=production" \
+            --set-env-vars="FIREBASE_PROJECT_ID=relay-email-ath" \
             --project=${{ env.PROJECT_ID }} \
             --quiet
 
