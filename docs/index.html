@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>TalentMail — Developer-friendly Email Delivery Platform</title>
-  <meta name="description" content="TalentMail はマルチテナント対応のメール配信SaaS。SMTP / SendGrid / Amazon SES をシンプルなAPIで統合。テンプレート管理・開封トラッキング・一斉配信を数行のコードで。">
+  <title>Relay — Developer-friendly Email Delivery Platform</title>
+  <meta name="description" content="Relay はマルチテナント対応のメール配信SaaS。SMTP / SendGrid / Amazon SES をシンプルなAPIで統合。テンプレート管理・開封トラッキング・一斉配信を数行のコードで。">
   <link rel="icon" type="image/jpeg" href="icon.jpg">
   <script src="https://cdn.tailwindcss.com"></script>
   <script>
@@ -61,8 +61,8 @@
   <header class="fixed top-0 w-full bg-white/80 backdrop-blur-md border-b border-slate-200 z-50">
     <div class="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
       <div class="flex items-center gap-3">
-        <img src="icon.jpg" alt="TalentMail" class="w-8 h-8 rounded-lg">
-        <span class="text-xl font-bold text-slate-800">TalentMail</span>
+        <img src="icon.jpg" alt="Relay" class="w-8 h-8 rounded-lg">
+        <span class="text-xl font-bold text-slate-800">Relay</span>
       </div>
       <nav class="hidden md:flex items-center gap-8 text-sm font-medium text-slate-600">
         <a href="#features" class="hover:text-primary transition-colors">Features</a>
@@ -106,9 +106,9 @@
             <span class="w-3 h-3 rounded-full bg-green-400"></span>
             <span class="ml-3 text-sm text-slate-400">send-email.ts</span>
           </div>
-          <pre class="p-5 text-sm leading-relaxed"><code><span class="text-slate-500">import</span> <span class="text-sky-300">{ TalentMail }</span> <span class="text-slate-500">from</span> <span class="text-emerald-300">'@apptalenthub/talentmail'</span>
+          <pre class="p-5 text-sm leading-relaxed"><code><span class="text-slate-500">import</span> <span class="text-sky-300">{ Relay }</span> <span class="text-slate-500">from</span> <span class="text-emerald-300">'@apptalenthub/talentmail'</span>
 
-<span class="text-slate-500">const</span> <span class="text-sky-300">client</span> = <span class="text-slate-500">new</span> <span class="text-yellow-300">TalentMail</span>(<span class="text-emerald-300">'tm_live_xxxx'</span>)
+<span class="text-slate-500">const</span> <span class="text-sky-300">client</span> = <span class="text-slate-500">new</span> <span class="text-yellow-300">Relay</span>(<span class="text-emerald-300">'tm_live_xxxx'</span>)
 
 <span class="text-slate-500">await</span> <span class="text-sky-300">client</span>.<span class="text-yellow-300">send</span>({
   <span class="text-violet-300">to</span>: <span class="text-emerald-300">'user@example.com'</span>,
@@ -364,7 +364,7 @@
   <section class="py-16 md:py-24 bg-primary">
     <div class="max-w-3xl mx-auto px-4 text-center">
       <h2 class="text-3xl md:text-4xl font-bold text-white mb-6">メール配信を始めよう</h2>
-      <p class="text-white/80 text-lg mb-10">Google アカウントでログインして、今すぐ無料で TalentMail を使い始めましょう。</p>
+      <p class="text-white/80 text-lg mb-10">Google アカウントでログインして、今すぐ無料で Relay を使い始めましょう。</p>
       <div class="flex flex-col sm:flex-row gap-4 justify-center">
         <a href="https://relay-email-ath.web.app" class="bg-white text-primary hover:bg-slate-100 px-8 py-3.5 rounded-lg font-semibold transition-colors text-lg">無料で始める</a>
         <a href="https://github.com/AppTalentHub/relay" class="border-2 border-white text-white hover:bg-white/10 px-8 py-3.5 rounded-lg font-semibold transition-colors text-lg">GitHub</a>
@@ -378,8 +378,8 @@
       <div class="grid grid-cols-1 md:grid-cols-3 gap-8 mb-8">
         <div>
           <div class="flex items-center gap-3 mb-4">
-            <img src="icon.jpg" alt="TalentMail" class="w-7 h-7 rounded-lg">
-            <span class="text-lg font-bold">TalentMail</span>
+            <img src="icon.jpg" alt="Relay" class="w-7 h-7 rounded-lg">
+            <span class="text-lg font-bold">Relay</span>
           </div>
           <p class="text-slate-400 text-sm leading-relaxed">Developer-friendly Email Delivery Platform.<br>Open alternative to Resend.</p>
         </div>
