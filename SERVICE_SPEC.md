@@ -86,7 +86,7 @@
 - DB: PostgreSQL (Cloud SQL)
 - メール送信: SMTP / SendGrid / Amazon SES（組織ごとに設定）
 - ホスティング: Cloud Run
-- SDK: @apptalenthub/talentmail
+- SDK: @apptalenthub/relay
 
 ## 7. ビジネスルール
 - APIキーは `tm_live_` プレフィックス。ハッシュのみDB保存。組織スコープ

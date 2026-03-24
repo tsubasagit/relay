@@ -91,7 +91,7 @@ packages/
 │   ├── hooks/useAuth.ts      # 認証フック
 │   ├── lib/api.ts            # API クライアント (Cookie認証 + X-Org-Id)
 │   └── pages/                # ページコンポーネント
-└── sdk/src/                  # クライアントSDK (@apptalenthub/talentmail)
+└── sdk/src/                  # クライアントSDK (@apptalenthub/relay)
 ```
 
 ## Authentication
