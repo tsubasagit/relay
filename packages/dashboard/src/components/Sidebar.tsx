@@ -158,7 +158,7 @@ export function Sidebar({ open, onClose }: SidebarProps) {
         </nav>
 
         <div className="absolute bottom-0 left-0 right-0 px-6 py-4 border-t border-gray-700">
-          <p className="text-xs text-gray-500">v0.3.0 {isPro ? "Pro" : "Free"}</p>
+          <p className="text-xs text-gray-500">v0.4.0 {isPro ? "Pro" : "Free"}</p>
         </div>
       </aside>
     </>

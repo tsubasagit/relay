@@ -67,9 +67,7 @@ app.post("/", async (c) => {
     if (err instanceof Error && err.message === "DUPLICATE") {
       return c.json({ error: "Contact with this email already exists" }, 409);
     }
-    const message = err instanceof Error ? err.message : String(err);
-    console.error("Contact create error:", message, err);
-    return c.json({ error: `Failed to create contact: ${message}` }, 500);
+    throw err;
   }
 });
 
