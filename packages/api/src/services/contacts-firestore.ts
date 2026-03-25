@@ -208,3 +208,17 @@ export async function importContacts(
 
   return { imported, skipped };
 }
+
+/** 配信停止リンク等で、Firestore上のコンタクトも isUnsubscribed を同期する */
+export async function markContactsUnsubscribedByEmail(orgId: string, email: string): Promise<number> {
+  const col = contactsCol(orgId);
+  const snap = await col.where("email", "==", email).get();
+  if (snap.empty) return 0;
+
+  const batch = firestore.batch();
+  for (const doc of snap.docs) {
+    batch.update(doc.ref, { isUnsubscribed: true });
+  }
+  await batch.commit();
+  return snap.docs.length;
+}

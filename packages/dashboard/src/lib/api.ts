@@ -21,6 +21,17 @@ function getCacheKey(path: string): string {
   return `${currentOrgId}:${path}`;
 }
 
+/**
+ * リアルタイム性が重要な GET はキャッシュしない。
+ * - /broadcasts: 一覧・詳細のステータス／ポーリング
+ * - /logs: 配信ログ・統計・クォータ（送信直後の反映）
+ */
+function shouldCacheGet(path: string): boolean {
+  if (path.startsWith("/broadcasts")) return false;
+  if (path.startsWith("/logs")) return false;
+  return true;
+}
+
 /** POST/PUT/DELETE 後にキャッシュを無効化 */
 export function invalidateCache(pathPrefix?: string) {
   if (!pathPrefix) {
@@ -41,8 +52,8 @@ async function request<T>(
   const isGet = method === "GET";
   const cacheKey = getCacheKey(path);
 
-  // GET はキャッシュを確認
-  if (isGet) {
+  // GET はキャッシュを確認（配信系は除外）
+  if (isGet && shouldCacheGet(path)) {
     const cached = requestCache.get(cacheKey);
     if (cached && Date.now() < cached.expiry) {
       return cached.data as T;
@@ -80,8 +91,9 @@ async function request<T>(
   const data = await res.json() as T;
 
   if (isGet) {
-    // GET レスポンスをキャッシュ
-    requestCache.set(cacheKey, { data, expiry: Date.now() + CACHE_TTL });
+    if (shouldCacheGet(path)) {
+      requestCache.set(cacheKey, { data, expiry: Date.now() + CACHE_TTL });
+    }
   } else {
     // 変更操作時はキャッシュ全クリア（次のGETで最新データを取得）
     requestCache.clear();
@@ -299,7 +311,12 @@ export const contactsApi = {
         const body = await res.json().catch(() => ({ error: res.statusText }));
         throw new Error(body.error || `HTTP ${res.status}`);
       }
-      return res.json() as Promise<{ data: { imported: number; skipped: number; total: number } }>;
+      const data = (await res.json()) as {
+        data: { imported: number; skipped: number; total: number };
+      };
+      // `request()` と同様、変更後は GET キャッシュを捨てる（import は FormData で request を通さない）
+      invalidateCache();
+      return data;
     });
   },
 };

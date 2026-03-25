@@ -35,18 +35,6 @@ app.get("/", async (c) => {
   return c.json({ data: result.data, total: result.total, limit, offset });
 });
 
-// Get single contact
-app.get("/:id", async (c) => {
-  const auth = c.get("auth" as never) as AuthContext;
-  const id = c.req.param("id");
-
-  const contact = await getContact(auth.orgId, id);
-  if (!contact) {
-    return c.json({ error: "Contact not found" }, 404);
-  }
-  return c.json({ data: contact });
-});
-
 // Create contact
 app.post("/", async (c) => {
   const auth = c.get("auth" as never) as AuthContext;
@@ -71,59 +59,64 @@ app.post("/", async (c) => {
   }
 });
 
-// Update contact
-app.put("/:id", async (c) => {
+// Google Workspace Directory Import（`/import` より長いパスを先に）
+app.post("/import/google", async (c) => {
   const auth = c.get("auth" as never) as AuthContext;
-  const id = c.req.param("id");
-  const body = await c.req.json();
 
-  const updateSchema = z.object({
-    email: z.string().email().optional(),
-    name: z.string().optional(),
-    metadata: z.record(z.string()).optional(),
-  });
-
-  const parsed = updateSchema.safeParse(body);
-  if (!parsed.success) {
-    return c.json({ error: "Validation failed", details: parsed.error.flatten() }, 400);
+  if (!auth.user) {
+    return c.json({ error: "Session auth required for Google import" }, 400);
   }
 
-  const updated = await updateContact(auth.orgId, id, parsed.data);
-  if (!updated) {
-    return c.json({ error: "Contact not found" }, 404);
+  const [user] = await db
+    .select({
+      id: users.id,
+      googleAccessToken: users.googleAccessToken,
+      googleRefreshToken: users.googleRefreshToken,
+    })
+    .from(users)
+    .where(eq(users.id, auth.user.id))
+    .limit(1);
+
+  if (!user?.googleRefreshToken) {
+    return c.json({
+      error: "Google連絡先へのアクセス権がありません。再ログインしてください。",
+    }, 400);
   }
-  return c.json({ data: updated });
+
+  try {
+    const { contacts: googleContacts, newAccessToken } =
+      await fetchGoogleWorkspaceContacts(
+        user.googleAccessToken || "",
+        user.googleRefreshToken
+      );
+
+    if (newAccessToken !== user.googleAccessToken) {
+      await db
+        .update(users)
+        .set({ googleAccessToken: newAccessToken })
+        .where(eq(users.id, user.id));
+    }
+
+    const items = googleContacts
+      .filter((gc) => gc.email)
+      .map((gc) => ({
+        email: gc.email!,
+        name: gc.name || null,
+        metadata: { source: "google_workspace" } as Record<string, string>,
+      }));
+
+    const result = await importContacts(auth.orgId, items);
+    return c.json({
+      data: { ...result, total: googleContacts.length },
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Unknown error";
+    console.error("Google Workspace import error:", message);
+    return c.json({ error: `Google連絡先の取得に失敗しました: ${message}` }, 500);
+  }
 });
 
-// Delete contact
-app.delete("/:id", async (c) => {
-  const auth = c.get("auth" as never) as AuthContext;
-  const id = c.req.param("id");
-
-  const deleted = await deleteContact(auth.orgId, id);
-  if (!deleted) {
-    return c.json({ error: "Contact not found" }, 404);
-  }
-
-  // Clean up audience_contacts in PostgreSQL
-  const memberships = await db
-    .select({ audienceId: audienceContacts.audienceId })
-    .from(audienceContacts)
-    .where(eq(audienceContacts.contactId, id));
-
-  await db.delete(audienceContacts).where(eq(audienceContacts.contactId, id));
-
-  for (const m of memberships) {
-    await db
-      .update(audiences)
-      .set({ contactCount: sql`MAX(${audiences.contactCount} - 1, 0)` })
-      .where(eq(audiences.id, m.audienceId));
-  }
-
-  return c.json({ message: "Contact deleted" });
-});
-
-// CSV Import
+// CSV Import（`/:id` より前に登録）
 app.post("/import", async (c) => {
   const auth = c.get("auth" as never) as AuthContext;
   const contentType = c.req.header("content-type") || "";
@@ -182,61 +175,73 @@ app.post("/import", async (c) => {
   return c.json({ data: { ...result, total: lines.length - 1 } });
 });
 
-// Google Workspace Directory Import
-app.post("/import/google", async (c) => {
+// Get single contact
+app.get("/:id", async (c) => {
   const auth = c.get("auth" as never) as AuthContext;
+  const id = c.req.param("id");
 
-  if (!auth.user) {
-    return c.json({ error: "Session auth required for Google import" }, 400);
+  const contact = await getContact(auth.orgId, id);
+  if (!contact) {
+    return c.json({ error: "Contact not found" }, 404);
+  }
+  return c.json({ data: contact });
+});
+
+// Update contact
+app.put("/:id", async (c) => {
+  const auth = c.get("auth" as never) as AuthContext;
+  const id = c.req.param("id");
+  const body = await c.req.json();
+
+  const updateSchema = z.object({
+    email: z.string().email().optional(),
+    name: z.string().optional(),
+    metadata: z.record(z.string()).optional(),
+  });
+
+  const parsed = updateSchema.safeParse(body);
+  if (!parsed.success) {
+    return c.json({ error: "Validation failed", details: parsed.error.flatten() }, 400);
   }
 
-  const [user] = await db
-    .select({
-      id: users.id,
-      googleAccessToken: users.googleAccessToken,
-      googleRefreshToken: users.googleRefreshToken,
-    })
-    .from(users)
-    .where(eq(users.id, auth.user.id))
-    .limit(1);
+  const updated = await updateContact(auth.orgId, id, parsed.data);
+  if (!updated) {
+    return c.json({ error: "Contact not found" }, 404);
+  }
+  return c.json({ data: updated });
+});
 
-  if (!user?.googleRefreshToken) {
-    return c.json({
-      error: "Google連絡先へのアクセス権がありません。再ログインしてください。",
-    }, 400);
+// Delete contact
+app.delete("/:id", async (c) => {
+  const auth = c.get("auth" as never) as AuthContext;
+  const id = c.req.param("id");
+
+  const existing = await getContact(auth.orgId, id);
+  if (!existing) {
+    return c.json({ error: "Contact not found" }, 404);
   }
 
-  try {
-    const { contacts: googleContacts, newAccessToken } =
-      await fetchGoogleWorkspaceContacts(
-        user.googleAccessToken || "",
-        user.googleRefreshToken
-      );
+  // PostgreSQL の整理を先に行い、その後 Firestore を削除する
+  const memberships = await db
+    .select({ audienceId: audienceContacts.audienceId })
+    .from(audienceContacts)
+    .where(eq(audienceContacts.contactId, id));
 
-    if (newAccessToken !== user.googleAccessToken) {
-      await db
-        .update(users)
-        .set({ googleAccessToken: newAccessToken })
-        .where(eq(users.id, user.id));
-    }
+  await db.delete(audienceContacts).where(eq(audienceContacts.contactId, id));
 
-    const items = googleContacts
-      .filter((gc) => gc.email)
-      .map((gc) => ({
-        email: gc.email!,
-        name: gc.name || null,
-        metadata: { source: "google_workspace" } as Record<string, string>,
-      }));
-
-    const result = await importContacts(auth.orgId, items);
-    return c.json({
-      data: { ...result, total: googleContacts.length },
-    });
-  } catch (err) {
-    const message = err instanceof Error ? err.message : "Unknown error";
-    console.error("Google Workspace import error:", message);
-    return c.json({ error: `Google連絡先の取得に失敗しました: ${message}` }, 500);
+  for (const m of memberships) {
+    await db
+      .update(audiences)
+      .set({ contactCount: sql`GREATEST(${audiences.contactCount} - 1, 0)` })
+      .where(eq(audiences.id, m.audienceId));
   }
+
+  const deleted = await deleteContact(auth.orgId, id);
+  if (!deleted) {
+    return c.json({ error: "Contact not found" }, 404);
+  }
+
+  return c.json({ message: "Contact deleted" });
 });
 
 export default app;

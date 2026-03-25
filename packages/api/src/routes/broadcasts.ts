@@ -57,57 +57,6 @@ app.get("/", async (c) => {
   return c.json({ data: rows, total: count, limit, offset });
 });
 
-// Get broadcast detail
-app.get("/:id", async (c) => {
-  const auth = c.get("auth" as never) as AuthContext;
-  const id = c.req.param("id");
-
-  const [broadcast] = await db
-    .select({
-      id: broadcasts.id,
-      orgId: broadcasts.orgId,
-      audienceId: broadcasts.audienceId,
-      templateId: broadcasts.templateId,
-      fromAddressId: broadcasts.fromAddressId,
-      fromAddress: broadcasts.fromAddress,
-      subject: broadcasts.subject,
-      variables: broadcasts.variables,
-      scheduledAt: broadcasts.scheduledAt,
-      status: broadcasts.status,
-      totalCount: broadcasts.totalCount,
-      sentCount: broadcasts.sentCount,
-      failedCount: broadcasts.failedCount,
-      skippedCount: broadcasts.skippedCount,
-      createdAt: broadcasts.createdAt,
-      completedAt: broadcasts.completedAt,
-      audienceName: audiences.name,
-      templateName: templates.name,
-    })
-    .from(broadcasts)
-    .leftJoin(audiences, eq(broadcasts.audienceId, audiences.id))
-    .leftJoin(templates, eq(broadcasts.templateId, templates.id))
-    .where(and(eq(broadcasts.id, id), eq(broadcasts.orgId, auth.orgId)))
-    .limit(1);
-
-  if (!broadcast) {
-    return c.json({ error: "Broadcast not found" }, 404);
-  }
-
-  // Get logs for this broadcast
-  const logLimit = Math.min(parseInt(c.req.query("logLimit") || "50"), 200);
-  const logOffset = parseInt(c.req.query("logOffset") || "0");
-
-  const logRows = await db
-    .select()
-    .from(emailLogs)
-    .where(and(eq(emailLogs.broadcastId, id), eq(emailLogs.orgId, auth.orgId)))
-    .orderBy(desc(emailLogs.createdAt))
-    .limit(logLimit)
-    .offset(logOffset);
-
-  return c.json({ data: { ...broadcast, logs: logRows } });
-});
-
 // Create & start (or schedule) broadcast
 app.post("/", async (c) => {
   const auth = c.get("auth" as never) as AuthContext;
@@ -408,7 +357,7 @@ app.post("/quick-send", async (c) => {
   }, 201);
 });
 
-// Cancel scheduled broadcast
+// Cancel scheduled broadcast（`/:id` より具体的なパスを先に）
 app.post("/:id/cancel", async (c) => {
   const auth = c.get("auth" as never) as AuthContext;
   const id = c.req.param("id");
@@ -433,6 +382,56 @@ app.post("/:id/cancel", async (c) => {
     .where(eq(broadcasts.id, id));
 
   return c.json({ message: "Broadcast cancelled" });
+});
+
+// Get broadcast detail（`/quick-send` 等の固定パスより後ろ）
+app.get("/:id", async (c) => {
+  const auth = c.get("auth" as never) as AuthContext;
+  const id = c.req.param("id");
+
+  const [broadcast] = await db
+    .select({
+      id: broadcasts.id,
+      orgId: broadcasts.orgId,
+      audienceId: broadcasts.audienceId,
+      templateId: broadcasts.templateId,
+      fromAddressId: broadcasts.fromAddressId,
+      fromAddress: broadcasts.fromAddress,
+      subject: broadcasts.subject,
+      variables: broadcasts.variables,
+      scheduledAt: broadcasts.scheduledAt,
+      status: broadcasts.status,
+      totalCount: broadcasts.totalCount,
+      sentCount: broadcasts.sentCount,
+      failedCount: broadcasts.failedCount,
+      skippedCount: broadcasts.skippedCount,
+      createdAt: broadcasts.createdAt,
+      completedAt: broadcasts.completedAt,
+      audienceName: audiences.name,
+      templateName: templates.name,
+    })
+    .from(broadcasts)
+    .leftJoin(audiences, eq(broadcasts.audienceId, audiences.id))
+    .leftJoin(templates, eq(broadcasts.templateId, templates.id))
+    .where(and(eq(broadcasts.id, id), eq(broadcasts.orgId, auth.orgId)))
+    .limit(1);
+
+  if (!broadcast) {
+    return c.json({ error: "Broadcast not found" }, 404);
+  }
+
+  const logLimit = Math.min(parseInt(c.req.query("logLimit") || "50"), 200);
+  const logOffset = parseInt(c.req.query("logOffset") || "0");
+
+  const logRows = await db
+    .select()
+    .from(emailLogs)
+    .where(and(eq(emailLogs.broadcastId, id), eq(emailLogs.orgId, auth.orgId)))
+    .orderBy(desc(emailLogs.createdAt))
+    .limit(logLimit)
+    .offset(logOffset);
+
+  return c.json({ data: { ...broadcast, logs: logRows } });
 });
 
 export default app;

@@ -5,6 +5,7 @@ import { unsubscribes } from "../db/schema.js";
 import { generateId } from "../utils/id.js";
 import { dispatchWebhookEvent } from "../services/webhook-dispatcher.js";
 import { buildUnsubscribePayload } from "../services/webhook-events.js";
+import { markContactsUnsubscribedByEmail } from "../services/contacts-firestore.js";
 
 const app = new Hono();
 
@@ -98,6 +99,8 @@ app.post("/:token", async (c) => {
       buildUnsubscribePayload(orgId, { email, reason, source: "link" })
     );
   }
+
+  await markContactsUnsubscribedByEmail(orgId, email);
 
   // RFC 8058: Return 200 for one-click requests
   if (isOneClick) {

@@ -24,6 +24,14 @@ import composeRoutes from "./routes/compose.js";
 
 const app = new Hono();
 
+/** `/api/foo/*` だけだと `GET /api/foo` に combinedAuth が掛からないため、サブアプリで包む */
+function withOrgScope(sub: Hono): Hono {
+  const scoped = new Hono();
+  scoped.use("*", combinedAuth, rateLimitByKey());
+  scoped.route("/", sub);
+  return scoped;
+}
+
 // Global middleware
 app.use("*", logger());
 app.use(
@@ -59,30 +67,17 @@ app.route("/api/orgs", orgRoutes);
 app.route("/api/invitations", invitationRoutes);
 
 // ─── Protected routes (combined auth: session+orgId or API key) ───
-app.use("/api/templates/*", combinedAuth, rateLimitByKey());
-app.use("/api/emails/*", combinedAuth, rateLimitByKey());
-app.use("/api/logs/*", combinedAuth, rateLimitByKey());
-app.use("/api/keys/*", combinedAuth, rateLimitByKey());
-app.use("/api/providers/*", combinedAuth, rateLimitByKey());
-app.use("/api/domains/*", combinedAuth, rateLimitByKey());
-app.use("/api/sending-addresses/*", combinedAuth, rateLimitByKey());
-app.use("/api/contacts/*", combinedAuth, rateLimitByKey());
-app.use("/api/audiences/*", combinedAuth, rateLimitByKey());
-app.use("/api/broadcasts/*", combinedAuth, rateLimitByKey());
-app.use("/api/webhooks/*", combinedAuth, rateLimitByKey());
-app.use("/api/compose/*", combinedAuth, rateLimitByKey());
-
-app.route("/api/templates", templateRoutes);
-app.route("/api/emails", emailRoutes);
-app.route("/api/logs", logRoutes);
-app.route("/api/keys", keyRoutes);
-app.route("/api/providers", providerRoutes);
-app.route("/api/domains", domainRoutes);
-app.route("/api/sending-addresses", sendingAddressRoutes);
-app.route("/api/contacts", contactRoutes);
-app.route("/api/audiences", audienceRoutes);
-app.route("/api/broadcasts", broadcastRoutes);
-app.route("/api/webhooks", webhookRoutes);
-app.route("/api/compose", composeRoutes);
+app.route("/api/templates", withOrgScope(templateRoutes));
+app.route("/api/emails", withOrgScope(emailRoutes));
+app.route("/api/logs", withOrgScope(logRoutes));
+app.route("/api/keys", withOrgScope(keyRoutes));
+app.route("/api/providers", withOrgScope(providerRoutes));
+app.route("/api/domains", withOrgScope(domainRoutes));
+app.route("/api/sending-addresses", withOrgScope(sendingAddressRoutes));
+app.route("/api/contacts", withOrgScope(contactRoutes));
+app.route("/api/audiences", withOrgScope(audienceRoutes));
+app.route("/api/broadcasts", withOrgScope(broadcastRoutes));
+app.route("/api/webhooks", withOrgScope(webhookRoutes));
+app.route("/api/compose", withOrgScope(composeRoutes));
 
 export default app;

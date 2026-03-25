@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { z } from "zod";
 import { eq, and, sql, desc } from "drizzle-orm";
 import { db } from "../db/client.js";
-import { audiences, audienceContacts, broadcasts, emailLogs } from "../db/schema.js";
+import { audiences, audienceContacts, broadcasts } from "../db/schema.js";
 import { generateId } from "../utils/id.js";
 import { getContact, getContactsByIds } from "../services/contacts-firestore.js";
 import type { AuthContext } from "../middleware/combined-auth.js";
@@ -20,60 +20,6 @@ app.get("/", async (c) => {
     .orderBy(desc(audiences.createdAt));
 
   return c.json({ data: rows });
-});
-
-// Get audience detail with contacts
-app.get("/:id", async (c) => {
-  const auth = c.get("auth" as never) as AuthContext;
-  const id = c.req.param("id");
-  const limit = Math.min(parseInt(c.req.query("limit") || "50"), 200);
-  const offset = parseInt(c.req.query("offset") || "0");
-
-  const [audience] = await db
-    .select()
-    .from(audiences)
-    .where(and(eq(audiences.id, id), eq(audiences.orgId, auth.orgId)))
-    .limit(1);
-
-  if (!audience) {
-    return c.json({ error: "Audience not found" }, 404);
-  }
-
-  // Get paginated contactIds from PG
-  const acRows = await db
-    .select({ contactId: audienceContacts.contactId, addedAt: audienceContacts.addedAt })
-    .from(audienceContacts)
-    .where(eq(audienceContacts.audienceId, id))
-    .orderBy(desc(audienceContacts.addedAt))
-    .limit(limit)
-    .offset(offset);
-
-  const [{ count }] = await db
-    .select({ count: sql<number>`count(*)` })
-    .from(audienceContacts)
-    .where(eq(audienceContacts.audienceId, id));
-
-  // Batch-fetch contacts from Firestore
-  const contactIds = acRows.map((r) => r.contactId);
-  const contactsData = await getContactsByIds(auth.orgId, contactIds);
-  const contactMap = new Map(contactsData.map((ct) => [ct.id, ct]));
-
-  const members = acRows
-    .map((r) => {
-      const ct = contactMap.get(r.contactId);
-      if (!ct) return null;
-      return {
-        id: ct.id,
-        email: ct.email,
-        name: ct.name,
-        isUnsubscribed: ct.isUnsubscribed,
-        createdAt: ct.createdAt,
-        addedAt: r.addedAt,
-      };
-    })
-    .filter(Boolean);
-
-  return c.json({ data: { ...audience, contacts: members }, total: count, limit, offset });
 });
 
 // Create audience
@@ -107,67 +53,7 @@ app.post("/", async (c) => {
   return c.json({ data: audience }, 201);
 });
 
-// Update audience
-app.put("/:id", async (c) => {
-  const auth = c.get("auth" as never) as AuthContext;
-  const id = c.req.param("id");
-  const body = await c.req.json();
-
-  const schema = z.object({
-    name: z.string().min(1).optional(),
-    description: z.string().optional(),
-  });
-
-  const parsed = schema.safeParse(body);
-  if (!parsed.success) {
-    return c.json({ error: "Validation failed", details: parsed.error.flatten() }, 400);
-  }
-
-  const [existing] = await db
-    .select()
-    .from(audiences)
-    .where(and(eq(audiences.id, id), eq(audiences.orgId, auth.orgId)))
-    .limit(1);
-
-  if (!existing) {
-    return c.json({ error: "Audience not found" }, 404);
-  }
-
-  const updates: Record<string, unknown> = {};
-  if (parsed.data.name !== undefined) updates.name = parsed.data.name;
-  if (parsed.data.description !== undefined) updates.description = parsed.data.description;
-
-  if (Object.keys(updates).length > 0) {
-    await db.update(audiences).set(updates).where(eq(audiences.id, id));
-  }
-
-  const [updated] = await db.select().from(audiences).where(eq(audiences.id, id)).limit(1);
-  return c.json({ data: updated });
-});
-
-// Delete audience
-app.delete("/:id", async (c) => {
-  const auth = c.get("auth" as never) as AuthContext;
-  const id = c.req.param("id");
-
-  const [existing] = await db
-    .select()
-    .from(audiences)
-    .where(and(eq(audiences.id, id), eq(audiences.orgId, auth.orgId)))
-    .limit(1);
-
-  if (!existing) {
-    return c.json({ error: "Audience not found" }, 404);
-  }
-
-  await db.delete(audienceContacts).where(eq(audienceContacts.audienceId, id));
-  await db.delete(broadcasts).where(eq(broadcasts.audienceId, id));
-  await db.delete(audiences).where(eq(audiences.id, id));
-
-  return c.json({ message: "Audience deleted" });
-});
-
-// Add contacts to audience
+// Add contacts to audience（`/:id` 単体より先に登録）
 app.post("/:id/contacts", async (c) => {
   const auth = c.get("auth" as never) as AuthContext;
   const id = c.req.param("id");
@@ -274,10 +160,122 @@ app.delete("/:id/contacts/:contactId", async (c) => {
 
   await db
     .update(audiences)
-    .set({ contactCount: sql`MAX(${audiences.contactCount} - 1, 0)` })
+    .set({ contactCount: sql`GREATEST(${audiences.contactCount} - 1, 0)` })
     .where(eq(audiences.id, id));
 
   return c.json({ message: "Contact removed from audience" });
+});
+
+// Get audience detail with contacts
+app.get("/:id", async (c) => {
+  const auth = c.get("auth" as never) as AuthContext;
+  const id = c.req.param("id");
+  const limit = Math.min(parseInt(c.req.query("limit") || "50"), 200);
+  const offset = parseInt(c.req.query("offset") || "0");
+
+  const [audience] = await db
+    .select()
+    .from(audiences)
+    .where(and(eq(audiences.id, id), eq(audiences.orgId, auth.orgId)))
+    .limit(1);
+
+  if (!audience) {
+    return c.json({ error: "Audience not found" }, 404);
+  }
+
+  const acRows = await db
+    .select({ contactId: audienceContacts.contactId, addedAt: audienceContacts.addedAt })
+    .from(audienceContacts)
+    .where(eq(audienceContacts.audienceId, id))
+    .orderBy(desc(audienceContacts.addedAt))
+    .limit(limit)
+    .offset(offset);
+
+  const [{ count }] = await db
+    .select({ count: sql<number>`count(*)` })
+    .from(audienceContacts)
+    .where(eq(audienceContacts.audienceId, id));
+
+  const contactIds = acRows.map((r) => r.contactId);
+  const contactsData = await getContactsByIds(auth.orgId, contactIds);
+  const contactMap = new Map(contactsData.map((ct) => [ct.id, ct]));
+
+  const members = acRows
+    .map((r) => {
+      const ct = contactMap.get(r.contactId);
+      if (!ct) return null;
+      return {
+        id: ct.id,
+        email: ct.email,
+        name: ct.name,
+        isUnsubscribed: ct.isUnsubscribed,
+        createdAt: ct.createdAt,
+        addedAt: r.addedAt,
+      };
+    })
+    .filter(Boolean);
+
+  return c.json({ data: { ...audience, contacts: members }, total: count, limit, offset });
+});
+
+// Update audience
+app.put("/:id", async (c) => {
+  const auth = c.get("auth" as never) as AuthContext;
+  const id = c.req.param("id");
+  const body = await c.req.json();
+
+  const schema = z.object({
+    name: z.string().min(1).optional(),
+    description: z.string().optional(),
+  });
+
+  const parsed = schema.safeParse(body);
+  if (!parsed.success) {
+    return c.json({ error: "Validation failed", details: parsed.error.flatten() }, 400);
+  }
+
+  const [existing] = await db
+    .select()
+    .from(audiences)
+    .where(and(eq(audiences.id, id), eq(audiences.orgId, auth.orgId)))
+    .limit(1);
+
+  if (!existing) {
+    return c.json({ error: "Audience not found" }, 404);
+  }
+
+  const updates: Record<string, unknown> = {};
+  if (parsed.data.name !== undefined) updates.name = parsed.data.name;
+  if (parsed.data.description !== undefined) updates.description = parsed.data.description;
+
+  if (Object.keys(updates).length > 0) {
+    await db.update(audiences).set(updates).where(eq(audiences.id, id));
+  }
+
+  const [updated] = await db.select().from(audiences).where(eq(audiences.id, id)).limit(1);
+  return c.json({ data: updated });
+});
+
+// Delete audience
+app.delete("/:id", async (c) => {
+  const auth = c.get("auth" as never) as AuthContext;
+  const id = c.req.param("id");
+
+  const [existing] = await db
+    .select()
+    .from(audiences)
+    .where(and(eq(audiences.id, id), eq(audiences.orgId, auth.orgId)))
+    .limit(1);
+
+  if (!existing) {
+    return c.json({ error: "Audience not found" }, 404);
+  }
+
+  await db.delete(audienceContacts).where(eq(audienceContacts.audienceId, id));
+  await db.delete(broadcasts).where(eq(broadcasts.audienceId, id));
+  await db.delete(audiences).where(eq(audiences.id, id));
+
+  return c.json({ message: "Audience deleted" });
 });
 
 export default app;
