@@ -197,8 +197,26 @@ export async function initDatabase(): Promise<void> {
       added_at TEXT NOT NULL,
       PRIMARY KEY (audience_id, contact_id)
     )`;
-  // コンタクト本体は Firestore。contact_id は FS の doc id のみで、PG の contacts 行は必ずしも存在しない
-  await sql`ALTER TABLE audience_contacts DROP CONSTRAINT IF EXISTS audience_contacts_contact_id_fkey`;
+  // コンタクト本体は Firestore。古い DB に残る contact_id → contacts(id) の FK は名前が環境で異なるため動的に除去
+  await sql`
+    DO $migrate$
+    DECLARE
+      r RECORD;
+    BEGIN
+      FOR r IN (
+        SELECT c.conname AS cname
+        FROM pg_constraint c
+        JOIN pg_class tbl ON c.conrelid = tbl.oid
+        JOIN pg_class ref ON c.confrelid = ref.oid
+        WHERE tbl.relname = 'audience_contacts'
+          AND c.contype = 'f'
+          AND ref.relname = 'contacts'
+      ) LOOP
+        EXECUTE format('ALTER TABLE audience_contacts DROP CONSTRAINT %I', r.cname);
+      END LOOP;
+    END;
+    $migrate$;
+  `;
 
   await sql`
     CREATE TABLE IF NOT EXISTS webhooks (
