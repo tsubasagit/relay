@@ -1,4 +1,4 @@
-import { neon } from "@neondatabase/serverless";
+import { neon, escapeIdentifier } from "@neondatabase/serverless";
 import { config } from "../config.js";
 
 export async function initDatabase(): Promise<void> {
@@ -197,26 +197,20 @@ export async function initDatabase(): Promise<void> {
       added_at TEXT NOT NULL,
       PRIMARY KEY (audience_id, contact_id)
     )`;
-  // コンタクト本体は Firestore。古い DB に残る contact_id → contacts(id) の FK は名前が環境で異なるため動的に除去
-  await sql`
-    DO $migrate$
-    DECLARE
-      r RECORD;
-    BEGIN
-      FOR r IN (
-        SELECT c.conname AS cname
-        FROM pg_constraint c
-        JOIN pg_class tbl ON c.conrelid = tbl.oid
-        JOIN pg_class ref ON c.confrelid = ref.oid
-        WHERE tbl.relname = 'audience_contacts'
-          AND c.contype = 'f'
-          AND ref.relname = 'contacts'
-      ) LOOP
-        EXECUTE format('ALTER TABLE audience_contacts DROP CONSTRAINT %I', r.cname);
-      END LOOP;
-    END;
-    $migrate$;
+  // コンタクト本体は Firestore。古い DB の contact_id→contacts(id) FK を除去（Neon HTTP は DO ブロックが不安定なため SELECT + 個別 DROP）
+  const fkToContacts = await sql`
+    SELECT c.conname AS cname
+    FROM pg_constraint c
+    JOIN pg_class tbl ON c.conrelid = tbl.oid
+    JOIN pg_class ref ON c.confrelid = ref.oid
+    WHERE tbl.relname = 'audience_contacts'
+      AND c.contype = 'f'
+      AND ref.relname = 'contacts'
   `;
+  for (const row of fkToContacts as { cname: string }[]) {
+    if (!/^[a-zA-Z0-9_]+$/.test(row.cname)) continue;
+    await sql`ALTER TABLE audience_contacts DROP CONSTRAINT ${sql.unsafe(escapeIdentifier(row.cname))}`;
+  }
 
   await sql`
     CREATE TABLE IF NOT EXISTS webhooks (
