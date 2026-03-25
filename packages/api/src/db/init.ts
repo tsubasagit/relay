@@ -197,19 +197,25 @@ export async function initDatabase(): Promise<void> {
       added_at TEXT NOT NULL,
       PRIMARY KEY (audience_id, contact_id)
     )`;
-  // コンタクト本体は Firestore。古い DB の contact_id→contacts(id) FK を除去（Neon HTTP は DO ブロックが不安定なため SELECT + 個別 DROP）
+  // コンタクト本体は Firestore。古い DB の contact_id→contacts(id) FK を除去（SELECT + sql.query で Neon HTTP 互換）
   const fkToContacts = await sql`
     SELECT c.conname AS cname
     FROM pg_constraint c
     JOIN pg_class tbl ON c.conrelid = tbl.oid
+    JOIN pg_namespace ns ON tbl.relnamespace = ns.oid
     JOIN pg_class ref ON c.confrelid = ref.oid
+    JOIN pg_namespace nsref ON ref.relnamespace = nsref.oid
     WHERE tbl.relname = 'audience_contacts'
-      AND c.contype = 'f'
+      AND ns.nspname = 'public'
       AND ref.relname = 'contacts'
+      AND nsref.nspname = 'public'
+      AND c.contype = 'f'
   `;
-  for (const row of fkToContacts as { cname: string }[]) {
-    if (!/^[a-zA-Z0-9_]+$/.test(row.cname)) continue;
-    await sql`ALTER TABLE audience_contacts DROP CONSTRAINT ${sql.unsafe(escapeIdentifier(row.cname))}`;
+  const fkRows = Array.isArray(fkToContacts) ? fkToContacts : [];
+  for (const row of fkRows as { cname: string }[]) {
+    if (!row?.cname || !/^[a-zA-Z0-9_]+$/.test(row.cname)) continue;
+    const q = `ALTER TABLE audience_contacts DROP CONSTRAINT ${escapeIdentifier(row.cname)}`;
+    await sql.query(q);
   }
 
   await sql`
