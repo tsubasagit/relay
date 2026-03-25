@@ -267,11 +267,20 @@ function AddContactsModal({
     if (selected.size === 0) return;
     setSaving(true);
     try {
-      await audiencesApi.addContacts(audienceId, [...selected]);
+      const res = await audiencesApi.addContacts(audienceId, [...selected]);
+      if (res.added === 0) {
+        if (res.skippedDuplicate > 0 && res.skippedNotFound === 0) {
+          alert("選択したコンタクトはすべて既にこのオーディエンスに含まれています");
+        } else if (res.skippedNotFound > 0 || res.skippedDuplicate > 0) {
+          alert(
+            "追加できたコンタクトがありません（見つからない ID または既に登録済み）"
+          );
+        }
+      }
       onAdded();
     } catch (err) {
       console.error(err);
-      alert("追加に失敗しました");
+      alert(err instanceof Error ? err.message : "追加に失敗しました");
     } finally {
       setSaving(false);
     }

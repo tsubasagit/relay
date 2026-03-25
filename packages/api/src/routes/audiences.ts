@@ -80,11 +80,16 @@ app.post("/:id/contacts", async (c) => {
 
   const now = new Date().toISOString();
   let added = 0;
+  let skippedNotFound = 0;
+  let skippedDuplicate = 0;
 
   for (const contactId of parsed.data.contactIds) {
     // Verify contact exists in Firestore
     const contact = await getContact(auth.orgId, contactId);
-    if (!contact) continue;
+    if (!contact) {
+      skippedNotFound++;
+      continue;
+    }
 
     // Check if already in audience
     const [existing] = await db
@@ -98,7 +103,10 @@ app.post("/:id/contacts", async (c) => {
       )
       .limit(1);
 
-    if (existing) continue;
+    if (existing) {
+      skippedDuplicate++;
+      continue;
+    }
 
     await db.insert(audienceContacts).values({
       audienceId: id,
@@ -108,6 +116,14 @@ app.post("/:id/contacts", async (c) => {
     added++;
   }
 
+  const totalRequested = parsed.data.contactIds.length;
+  if (added === 0 && totalRequested > 0 && skippedNotFound === totalRequested) {
+    return c.json(
+      { error: "指定したコンタクトがこの組織に見つかりません" },
+      400
+    );
+  }
+
   // Update contact count
   await db
     .update(audiences)
@@ -115,7 +131,12 @@ app.post("/:id/contacts", async (c) => {
     .where(eq(audiences.id, id));
 
   const [updated] = await db.select().from(audiences).where(eq(audiences.id, id)).limit(1);
-  return c.json({ data: updated, added });
+  return c.json({
+    data: updated,
+    added,
+    skippedNotFound,
+    skippedDuplicate,
+  });
 });
 
 // Remove contact from audience

@@ -25,10 +25,12 @@ function getCacheKey(path: string): string {
  * リアルタイム性が重要な GET はキャッシュしない。
  * - /broadcasts: 一覧・詳細のステータス／ポーリング
  * - /logs: 配信ログ・統計・クォータ（送信直後の反映）
+ * - /audiences: メンバー追加・削除直後の一覧／件数
  */
 function shouldCacheGet(path: string): boolean {
   if (path.startsWith("/broadcasts")) return false;
   if (path.startsWith("/logs")) return false;
+  if (path.startsWith("/audiences")) return false;
   return true;
 }
 
@@ -344,7 +346,12 @@ export const audiencesApi = {
   delete: (id: string) =>
     request<{ message: string }>(`/audiences/${id}`, { method: "DELETE" }),
   addContacts: (id: string, contactIds: string[]) =>
-    request<{ data: Audience; added: number }>(`/audiences/${id}/contacts`, {
+    request<{
+      data: Audience;
+      added: number;
+      skippedNotFound: number;
+      skippedDuplicate: number;
+    }>(`/audiences/${id}/contacts`, {
       method: "POST",
       body: JSON.stringify({ contactIds }),
     }),
