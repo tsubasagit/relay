@@ -68,6 +68,7 @@ app.post("/:id/contacts", async (c) => {
     return c.json({ error: "Validation failed", details: parsed.error.flatten() }, 400);
   }
 
+  const debugId = `aud_add_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
   const [audience] = await db
     .select()
     .from(audiences)
@@ -83,37 +84,49 @@ app.post("/:id/contacts", async (c) => {
   let skippedNotFound = 0;
   let skippedDuplicate = 0;
 
-  for (const contactId of parsed.data.contactIds) {
-    // Verify contact exists in Firestore
-    const contact = await getContact(auth.orgId, contactId);
-    if (!contact) {
-      skippedNotFound++;
-      continue;
-    }
+  try {
+    for (const contactId of parsed.data.contactIds) {
+      const contact = await getContact(auth.orgId, contactId);
+      if (!contact) {
+        skippedNotFound++;
+        continue;
+      }
 
-    // Check if already in audience
-    const [existing] = await db
-      .select({ audienceId: audienceContacts.audienceId })
-      .from(audienceContacts)
-      .where(
-        and(
-          eq(audienceContacts.audienceId, id),
-          eq(audienceContacts.contactId, contactId)
+      const [existing] = await db
+        .select({ audienceId: audienceContacts.audienceId })
+        .from(audienceContacts)
+        .where(
+          and(
+            eq(audienceContacts.audienceId, id),
+            eq(audienceContacts.contactId, contactId)
+          )
         )
-      )
-      .limit(1);
+        .limit(1);
 
-    if (existing) {
-      skippedDuplicate++;
-      continue;
+      if (existing) {
+        skippedDuplicate++;
+        continue;
+      }
+
+      await db.insert(audienceContacts).values({
+        audienceId: id,
+        contactId,
+        addedAt: now,
+      });
+      added++;
     }
-
-    await db.insert(audienceContacts).values({
+  } catch (err) {
+    console.error("[AUDIENCES:addContacts]", {
+      debugId,
+      orgId: auth.orgId,
       audienceId: id,
-      contactId,
-      addedAt: now,
+      requested: parsed.data.contactIds.length,
+      added,
+      skippedNotFound,
+      skippedDuplicate,
+      error: err instanceof Error ? err.message : String(err),
     });
-    added++;
+    return c.json({ error: "オーディエンスへの追加に失敗しました", debugId }, 500);
   }
 
   const totalRequested = parsed.data.contactIds.length;
@@ -131,6 +144,15 @@ app.post("/:id/contacts", async (c) => {
     .where(eq(audiences.id, id));
 
   const [updated] = await db.select().from(audiences).where(eq(audiences.id, id)).limit(1);
+  console.info("[AUDIENCES:addContacts]", {
+    debugId,
+    orgId: auth.orgId,
+    audienceId: id,
+    requested: parsed.data.contactIds.length,
+    added,
+    skippedNotFound,
+    skippedDuplicate,
+  });
   return c.json({
     data: updated,
     added,
@@ -281,6 +303,7 @@ app.put("/:id", async (c) => {
 app.delete("/:id", async (c) => {
   const auth = c.get("auth" as never) as AuthContext;
   const id = c.req.param("id");
+  const debugId = `aud_del_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 
   const [existing] = await db
     .select()
@@ -292,10 +315,21 @@ app.delete("/:id", async (c) => {
     return c.json({ error: "Audience not found" }, 404);
   }
 
-  await db.delete(audienceContacts).where(eq(audienceContacts.audienceId, id));
-  await db.delete(broadcasts).where(eq(broadcasts.audienceId, id));
-  await db.delete(audiences).where(eq(audiences.id, id));
+  try {
+    await db.delete(audienceContacts).where(eq(audienceContacts.audienceId, id));
+    await db.delete(broadcasts).where(and(eq(broadcasts.audienceId, id), eq(broadcasts.orgId, auth.orgId)));
+    await db.delete(audiences).where(eq(audiences.id, id));
+  } catch (err) {
+    console.error("[AUDIENCES:delete]", {
+      debugId,
+      orgId: auth.orgId,
+      audienceId: id,
+      error: err instanceof Error ? err.message : String(err),
+    });
+    return c.json({ error: "オーディエンスの削除に失敗しました", debugId }, 500);
+  }
 
+  console.info("[AUDIENCES:delete]", { debugId, orgId: auth.orgId, audienceId: id });
   return c.json({ message: "Audience deleted" });
 });
 
