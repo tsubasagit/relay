@@ -86,8 +86,14 @@ async function request<T>(
   }
 
   if (!res.ok) {
-    const body = await res.json().catch(() => ({ error: res.statusText }));
-    throw new Error(body.error || `HTTP ${res.status}`);
+    const body = (await res.json().catch(() => ({ error: res.statusText }))) as {
+      error?: string;
+      message?: string;
+      debugId?: string;
+    };
+    const base = body.error || body.message || `HTTP ${res.status}`;
+    const suffix = body.debugId ? ` (debugId: ${body.debugId})` : "";
+    throw new Error(`${base}${suffix}`);
   }
 
   const data = await res.json() as T;
