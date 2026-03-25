@@ -193,10 +193,12 @@ export async function initDatabase(): Promise<void> {
   await sql`
     CREATE TABLE IF NOT EXISTS audience_contacts (
       audience_id TEXT NOT NULL REFERENCES audiences(id),
-      contact_id TEXT NOT NULL REFERENCES contacts(id),
+      contact_id TEXT NOT NULL,
       added_at TEXT NOT NULL,
       PRIMARY KEY (audience_id, contact_id)
     )`;
+  // コンタクト本体は Firestore。contact_id は FS の doc id のみで、PG の contacts 行は必ずしも存在しない
+  await sql`ALTER TABLE audience_contacts DROP CONSTRAINT IF EXISTS audience_contacts_contact_id_fkey`;
 
   await sql`
     CREATE TABLE IF NOT EXISTS webhooks (
