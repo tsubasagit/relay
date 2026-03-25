@@ -30,41 +30,93 @@ function toContact(orgId: string, doc: FirebaseFirestore.DocumentSnapshot): Cont
 
 export async function listContacts(
   orgId: string,
-  opts: { search?: string; limit: number; offset: number }
-): Promise<{ data: Contact[]; total: number }> {
+  opts: { search?: string; limit: number; cursor?: string }
+): Promise<{ data: Contact[]; total: number; nextCursor: string | null }> {
   const col = contactsCol(orgId);
 
-  // Count total (with or without search)
-  let total: number;
-  let docs: FirebaseFirestore.QueryDocumentSnapshot[];
-
   if (opts.search) {
-    // Fetch all and filter in-memory (acceptable for small-to-medium datasets)
-    const allSnap = await col.orderBy("createdAt", "desc").get();
+    // 検索: emailプレフィックス検索 → Firestoreネイティブクエリで高速化
+    // 部分一致が必要な場合のみメモリフィルタにフォールバック
     const searchLower = opts.search.toLowerCase();
-    const filtered = allSnap.docs.filter((d) => {
-      const data = d.data();
-      return (
-        (data.email && data.email.toLowerCase().includes(searchLower)) ||
-        (data.name && data.name.toLowerCase().includes(searchLower))
-      );
-    });
-    total = filtered.length;
-    docs = filtered.slice(opts.offset, opts.offset + opts.limit);
-  } else {
+    const endStr = searchLower.slice(0, -1) + String.fromCharCode(searchLower.charCodeAt(searchLower.length - 1) + 1);
+
+    // emailプレフィックス検索をFirestoreネイティブで試行
+    let query = col
+      .where("email", ">=", searchLower)
+      .where("email", "<", endStr);
+
+    const prefixSnap = await query.limit(opts.limit + 1).get();
+
+    // プレフィックス検索でヒットしなければ、名前でも検索（限定的なメモリフィルタ）
+    if (prefixSnap.empty) {
+      // 名前検索: emailSearchでヒットしない場合のみ全件走査
+      // ただし件数を制限してパフォーマンス悪化を防ぐ
+      const MAX_SCAN = 2000;
+      let baseQuery = col.orderBy("createdAt", "desc").limit(MAX_SCAN);
+      if (opts.cursor) {
+        const cursorDoc = await col.doc(opts.cursor).get();
+        if (cursorDoc.exists) {
+          baseQuery = col.orderBy("createdAt", "desc").startAfter(cursorDoc).limit(MAX_SCAN);
+        }
+      }
+      const scanSnap = await baseQuery.get();
+      const filtered = scanSnap.docs.filter((d) => {
+        const data = d.data();
+        return (
+          (data.email && data.email.toLowerCase().includes(searchLower)) ||
+          (data.name && data.name.toLowerCase().includes(searchLower))
+        );
+      });
+
+      const countSnap = await col.count().get();
+      const docs = filtered.slice(0, opts.limit);
+      const nextCursor = docs.length === opts.limit && scanSnap.docs.length === MAX_SCAN
+        ? scanSnap.docs[scanSnap.docs.length - 1].id
+        : null;
+
+      return {
+        data: docs.map((d) => toContact(orgId, d)),
+        total: countSnap.data().count,
+        nextCursor,
+      };
+    }
+
+    // プレフィックス検索成功
+    const hasMore = prefixSnap.docs.length > opts.limit;
+    const docs = hasMore ? prefixSnap.docs.slice(0, opts.limit) : prefixSnap.docs;
     const countSnap = await col.count().get();
-    total = countSnap.data().count;
-    // Fetch offset + limit, then skip offset
-    const snap = await col
-      .orderBy("createdAt", "desc")
-      .limit(opts.offset + opts.limit)
-      .get();
-    docs = snap.docs.slice(opts.offset);
+
+    return {
+      data: docs.map((d) => toContact(orgId, d)),
+      total: countSnap.data().count,
+      nextCursor: hasMore ? docs[docs.length - 1].id : null,
+    };
   }
+
+  // 通常一覧: カーソルベースページネーション
+  const [countSnap, dataSnap] = await Promise.all([
+    col.count().get(),
+    (async () => {
+      let query = col.orderBy("createdAt", "desc");
+      if (opts.cursor) {
+        const cursorDoc = await col.doc(opts.cursor).get();
+        if (cursorDoc.exists) {
+          query = query.startAfter(cursorDoc);
+        }
+      }
+      return query.limit(opts.limit + 1).get();
+    })(),
+  ]);
+
+  const total = countSnap.data().count;
+  const hasMore = dataSnap.docs.length > opts.limit;
+  const docs = hasMore ? dataSnap.docs.slice(0, opts.limit) : dataSnap.docs;
+  const nextCursor = hasMore ? docs[docs.length - 1].id : null;
 
   return {
     data: docs.map((d) => toContact(orgId, d)),
     total,
+    nextCursor,
   };
 }
 

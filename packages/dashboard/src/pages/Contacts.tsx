@@ -31,7 +31,10 @@ export default function Contacts() {
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
-  const [offset, setOffset] = useState(0);
+  const [cursor, setCursor] = useState<string | undefined>(undefined);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [cursorHistory, setCursorHistory] = useState<(string | undefined)[]>([]);
+  const [page, setPage] = useState(0);
   const limit = 50;
 
   // Selection
@@ -46,15 +49,16 @@ export default function Contacts() {
 
   const load = useCallback(async () => {
     try {
-      const res = await contactsApi.list({ search: search || undefined, limit, offset });
+      const res = await contactsApi.list({ search: search || undefined, limit, cursor });
       setItems(res.data);
       setTotal(res.total);
+      setNextCursor(res.nextCursor);
     } catch (err) {
       console.error(err);
     } finally {
       setLoading(false);
     }
-  }, [search, offset]);
+  }, [search, cursor]);
 
   useEffect(() => {
     setLoading(true);
@@ -65,7 +69,7 @@ export default function Contacts() {
   // Clear selection when page/search changes
   useEffect(() => {
     setSelected(new Set());
-  }, [offset, search]);
+  }, [cursor, search]);
 
   function toggleSelect(id: string) {
     setSelected((prev) => {
@@ -170,7 +174,9 @@ export default function Contacts() {
           value={search}
           onChange={(e) => {
             setSearch(e.target.value);
-            setOffset(0);
+            setCursor(undefined);
+            setCursorHistory([]);
+            setPage(0);
           }}
           className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
         />
@@ -302,22 +308,33 @@ export default function Contacts() {
           </div>
 
           {/* Pagination */}
-          {total > limit && (
+          {(cursorHistory.length > 0 || nextCursor) && (
             <div className="flex items-center justify-between mt-4">
               <p className="text-sm text-gray-500">
-                {offset + 1} - {Math.min(offset + limit, total)} / {total}件
+                {page * limit + 1} - {Math.min(page * limit + items.length, total)} / {total}件
               </p>
               <div className="flex items-center gap-2">
                 <button
-                  onClick={() => setOffset(Math.max(0, offset - limit))}
-                  disabled={offset === 0}
+                  onClick={() => {
+                    const prev = cursorHistory[cursorHistory.length - 1];
+                    setCursorHistory((h) => h.slice(0, -1));
+                    setCursor(prev);
+                    setPage((p) => p - 1);
+                  }}
+                  disabled={cursorHistory.length === 0}
                   className="p-2 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <ChevronLeft className="w-4 h-4" />
                 </button>
                 <button
-                  onClick={() => setOffset(offset + limit)}
-                  disabled={offset + limit >= total}
+                  onClick={() => {
+                    if (nextCursor) {
+                      setCursorHistory((h) => [...h, cursor]);
+                      setCursor(nextCursor);
+                      setPage((p) => p + 1);
+                    }
+                  }}
+                  disabled={!nextCursor}
                   className="p-2 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <ChevronRight className="w-4 h-4" />

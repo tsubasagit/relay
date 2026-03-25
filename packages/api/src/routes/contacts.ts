@@ -29,10 +29,10 @@ app.get("/", async (c) => {
   const auth = c.get("auth" as never) as AuthContext;
   const search = c.req.query("search");
   const limit = Math.min(parseInt(c.req.query("limit") || "50"), 200);
-  const offset = parseInt(c.req.query("offset") || "0");
+  const cursor = c.req.query("cursor") || undefined;
 
-  const result = await listContacts(auth.orgId, { search, limit, offset });
-  return c.json({ data: result.data, total: result.total, limit, offset });
+  const result = await listContacts(auth.orgId, { search, limit, cursor });
+  return c.json({ data: result.data, total: result.total, limit, nextCursor: result.nextCursor });
 });
 
 // Create contact

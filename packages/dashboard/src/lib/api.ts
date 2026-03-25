@@ -31,6 +31,7 @@ function shouldCacheGet(path: string): boolean {
   if (path.startsWith("/broadcasts")) return false;
   if (path.startsWith("/logs")) return false;
   if (path.startsWith("/audiences")) return false;
+  // /contacts はキャッシュ対象（ページ遷移時の再取得を防止）
   return true;
 }
 
@@ -278,13 +279,13 @@ export const sendingAddressesApi = {
 
 // ─── Contacts ───
 export const contactsApi = {
-  list: (params?: { search?: string; limit?: number; offset?: number }) => {
+  list: (params?: { search?: string; limit?: number; cursor?: string }) => {
     const sp = new URLSearchParams();
     if (params?.search) sp.set("search", params.search);
     if (params?.limit) sp.set("limit", String(params.limit));
-    if (params?.offset) sp.set("offset", String(params.offset));
+    if (params?.cursor) sp.set("cursor", params.cursor);
     const qs = sp.toString();
-    return request<{ data: Contact[]; total: number }>(`/contacts${qs ? `?${qs}` : ""}`);
+    return request<{ data: Contact[]; total: number; nextCursor: string | null }>(`/contacts${qs ? `?${qs}` : ""}`);
   },
   get: (id: string) => request<{ data: Contact }>(`/contacts/${id}`),
   create: (data: { email: string; name?: string; metadata?: Record<string, string> }) =>
