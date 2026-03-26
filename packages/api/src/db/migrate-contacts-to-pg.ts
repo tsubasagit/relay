@@ -9,7 +9,9 @@ import { resolve, dirname } from "path";
 import { fileURLToPath } from "url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
+// Try multiple .env paths for Windows/WSL compatibility
 dotenvConfig({ path: resolve(__dirname, "../../../.env") });
+dotenvConfig({ path: resolve(process.cwd(), ".env") });
 
 import { neon } from "@neondatabase/serverless";
 import { drizzle } from "drizzle-orm/neon-http";
@@ -36,7 +38,8 @@ async function migrate() {
   await sqlClient`ALTER TABLE contacts ADD COLUMN IF NOT EXISTS type TEXT`;
 
   // 全組織を取得
-  const orgs = await db.execute(sql`SELECT id FROM organizations`);
+  const orgsResult = await sqlClient`SELECT id FROM organizations`;
+  const orgs = Array.isArray(orgsResult) ? orgsResult : orgsResult.rows || [];
   console.log(`${orgs.length} organizations found\n`);
 
   let totalMigrated = 0;
@@ -105,7 +108,8 @@ async function migrate() {
   }
 
   // Verify
-  const [{ count }] = await db.execute(sql`SELECT count(*) as count FROM contacts`) as { count: number }[];
+  const countResult = await sqlClient`SELECT count(*) as count FROM contacts`;
+  const count = (Array.isArray(countResult) ? countResult[0]?.count : 0);
   console.log(`\n=== Migration complete ===`);
   console.log(`PostgreSQL contacts: ${count}`);
 
