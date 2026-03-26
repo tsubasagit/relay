@@ -26,17 +26,7 @@ export function verifyUnsubscribeToken(token: string): { orgId: string; email: s
     // 署名検証
     const expected = signToken(payloadPart);
     if (sigPart !== expected) {
-      // レガシー形式（署名なし）へのフォールバック: orgId:email のみ
-      const colonIdx = decoded.indexOf(":");
-      if (colonIdx === -1) return null;
-      const legacyPayload = decoded;
-      const legacySig = signToken(legacyPayload);
-      // レガシーは署名がないのでそのまま検証不可 → 互換性のため一時的に許可
-      // TODO: 移行期間後に削除
-      return {
-        orgId: decoded.slice(0, colonIdx),
-        email: decoded.slice(colonIdx + 1),
-      };
+      return null; // 署名不一致 → 拒否
     }
 
     const colonIdx = payloadPart.indexOf(":");

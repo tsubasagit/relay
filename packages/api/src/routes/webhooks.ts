@@ -15,6 +15,22 @@ function generateSecret(): string {
   return `whsec_${randomBytes(24).toString("base64url")}`;
 }
 
+function isValidWebhookUrl(urlStr: string): boolean {
+  try {
+    const url = new URL(urlStr);
+    if (!["http:", "https:"].includes(url.protocol)) return false;
+    const hostname = url.hostname;
+    const blocked = [
+      /^localhost$/i, /^127\./, /^0\.0\.0\.0$/, /^::1$/, /^\[::1\]$/,
+      /^10\./, /^192\.168\./, /^172\.(1[6-9]|2[0-9]|3[01])\./,
+      /^169\.254\./, /^fc00:/i, /^fe80:/i,
+    ];
+    return !blocked.some((r) => r.test(hostname));
+  } catch {
+    return false;
+  }
+}
+
 // List webhooks
 app.get("/", async (c) => {
   const auth = c.get("auth" as never) as AuthContext;
@@ -49,7 +65,8 @@ app.get("/:id", async (c) => {
     return c.json({ error: "Webhook not found" }, 404);
   }
 
-  return c.json({ data: hook });
+  const { secret: _secret, ...safeHook } = hook;
+  return c.json({ data: safeHook });
 });
 
 // Create webhook
@@ -65,6 +82,10 @@ app.post("/", async (c) => {
   const parsed = schema.safeParse(body);
   if (!parsed.success) {
     return c.json({ error: "Validation failed", details: parsed.error.flatten() }, 400);
+  }
+
+  if (!isValidWebhookUrl(parsed.data.url)) {
+    return c.json({ error: "Invalid webhook URL. Private/internal addresses are not allowed." }, 400);
   }
 
   const id = generateId("wh");

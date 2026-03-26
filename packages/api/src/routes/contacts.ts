@@ -127,6 +127,9 @@ app.post("/import", async (c) => {
   const auth = c.get("auth" as never) as AuthContext;
   const contentType = c.req.header("content-type") || "";
 
+  const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+  const MAX_ROWS = 100_000;
+
   let csvText: string;
 
   if (contentType.includes("multipart/form-data")) {
@@ -135,6 +138,9 @@ app.post("/import", async (c) => {
     if (!file || typeof file === "string") {
       return c.json({ error: "No CSV file provided" }, 400);
     }
+    if ((file as File).size > MAX_FILE_SIZE) {
+      return c.json({ error: "ファイルサイズが上限（10MB）を超えています" }, 413);
+    }
     csvText = await (file as File).text();
   } else {
     const body = await c.req.json();
@@ -142,11 +148,17 @@ app.post("/import", async (c) => {
     if (!csvText) {
       return c.json({ error: "No CSV data provided" }, 400);
     }
+    if (csvText.length > MAX_FILE_SIZE) {
+      return c.json({ error: "CSVデータが上限（10MB）を超えています" }, 413);
+    }
   }
 
   const lines = csvText.trim().split("\n").map((l) => l.trim()).filter(Boolean);
   if (lines.length < 2) {
     return c.json({ error: "CSV must have a header row and at least one data row" }, 400);
+  }
+  if (lines.length > MAX_ROWS + 1) {
+    return c.json({ error: `行数が上限（${MAX_ROWS.toLocaleString()}行）を超えています` }, 400);
   }
 
   const headers = lines[0].split(",").map((h) => h.trim().toLowerCase().replace(/^"(.*)"$/, "$1"));
@@ -201,6 +213,11 @@ app.get("/:id", async (c) => {
 app.get("/:id/audiences", async (c) => {
   const auth = c.get("auth" as never) as AuthContext;
   const contactId = c.req.param("id");
+
+  const contact = await getContact(auth.orgId, contactId);
+  if (!contact) {
+    return c.json({ error: "Contact not found" }, 404);
+  }
 
   const rows = await db
     .select({
