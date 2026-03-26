@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Plus, List, Trash2 } from "lucide-react";
+import { Plus, List, Trash2, User, Building2, Megaphone } from "lucide-react";
 import { audiencesApi, type Audience } from "../lib/api";
 
 export default function Lists() {
@@ -171,6 +171,31 @@ function CreateListModal({
               {error}
             </div>
           )}
+
+          {/* 候補から選択 */}
+          {!name && (
+            <div>
+              <p className="text-xs text-gray-500 mb-2">よく使うリスト</p>
+              <div className="flex flex-wrap gap-2">
+                {[
+                  { label: "個人", icon: User, desc: "個人のコンタクト" },
+                  { label: "法人", icon: Building2, desc: "法人・企業のコンタクト" },
+                  { label: "ニュースレター", icon: Megaphone, desc: "ニュースレター購読者" },
+                ].map((s) => (
+                  <button
+                    key={s.label}
+                    type="button"
+                    onClick={() => { setName(s.label); setDescription(s.desc); }}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-gray-200 rounded-lg text-sm text-gray-700 hover:border-indigo-300 hover:bg-indigo-50 transition-colors"
+                  >
+                    <s.icon className="w-3.5 h-3.5 text-gray-400" />
+                    {s.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
               リスト名 *
@@ -180,7 +205,7 @@ function CreateListModal({
               required
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="例: お客様、ニュースレター読者"
+              placeholder="例: 個人、法人、ニュースレター読者"
               className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
             />
           </div>

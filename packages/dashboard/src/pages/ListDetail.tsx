@@ -11,6 +11,7 @@ import {
   X,
   Check,
   PenSquare,
+  Pencil,
 } from "lucide-react";
 import {
   audiencesApi,
@@ -28,6 +29,10 @@ export default function ListDetail() {
   const [loading, setLoading] = useState(true);
   const [offset, setOffset] = useState(0);
   const [showAddContacts, setShowAddContacts] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [editName, setEditName] = useState("");
+  const [editDesc, setEditDesc] = useState("");
+  const [savingName, setSavingName] = useState(false);
   const limit = 50;
 
   const load = useCallback(async () => {
@@ -87,9 +92,72 @@ export default function ListDetail() {
 
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">{list.name}</h1>
-          {list.description && (
-            <p className="text-gray-500 mt-1">{list.description}</p>
+          {editing ? (
+            <form
+              onSubmit={async (e) => {
+                e.preventDefault();
+                if (!id || !editName.trim()) return;
+                setSavingName(true);
+                try {
+                  await audiencesApi.update(id, { name: editName.trim(), description: editDesc || undefined });
+                  setList((prev) => prev ? { ...prev, name: editName.trim(), description: editDesc || null } : prev);
+                  setEditing(false);
+                } catch (err) {
+                  alert(err instanceof Error ? err.message : "更新に失敗しました");
+                } finally {
+                  setSavingName(false);
+                }
+              }}
+              className="space-y-2"
+            >
+              <input
+                type="text"
+                value={editName}
+                onChange={(e) => setEditName(e.target.value)}
+                required
+                autoFocus
+                className="text-2xl font-bold text-gray-900 border border-gray-300 rounded-lg px-2 py-1 focus:outline-none focus:ring-2 focus:ring-indigo-500 w-full"
+              />
+              <input
+                type="text"
+                value={editDesc}
+                onChange={(e) => setEditDesc(e.target.value)}
+                placeholder="説明（任意）"
+                className="text-sm text-gray-500 border border-gray-300 rounded-lg px-2 py-1 focus:outline-none focus:ring-2 focus:ring-indigo-500 w-full"
+              />
+              <div className="flex gap-2">
+                <button
+                  type="submit"
+                  disabled={savingName}
+                  className="px-3 py-1 text-xs text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 disabled:opacity-50"
+                >
+                  {savingName ? "保存中..." : "保存"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setEditing(false)}
+                  className="px-3 py-1 text-xs text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50"
+                >
+                  キャンセル
+                </button>
+              </div>
+            </form>
+          ) : (
+            <>
+              <div className="flex items-center gap-2">
+                <h1 className="text-2xl font-bold text-gray-900">{list.name}</h1>
+                <button
+                  onClick={() => { setEditName(list.name); setEditDesc(list.description || ""); setEditing(true); }}
+                  className="p-1 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+                  title="名前を変更"
+                >
+                  <Pencil className="w-4 h-4" />
+                </button>
+              </div>
+              {list.description && (
+                <p className="text-gray-500 mt-1">{list.description}</p>
+              )}
+            </>
           )}
           <p className="text-sm text-gray-400 mt-1">
             {list.contactCount}件のコンタクト
