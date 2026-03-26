@@ -289,6 +289,7 @@ export const contactsApi = {
     return request<{ data: Contact[]; total: number; nextCursor: string | null }>(`/contacts${qs ? `?${qs}` : ""}`);
   },
   get: (id: string) => request<{ data: Contact }>(`/contacts/${id}`),
+  audiences: (id: string) => request<{ data: ContactAudience[] }>(`/contacts/${id}/audiences`),
   create: (data: { email: string; name?: string; metadata?: Record<string, string>; type?: ContactType }) =>
     request<{ data: Contact }>("/contacts", {
       method: "POST",
@@ -634,6 +635,12 @@ export interface Contact {
   isUnsubscribed: boolean;
   type: ContactType | null;
   createdAt: string;
+}
+
+export interface ContactAudience {
+  id: string;
+  name: string;
+  addedAt: string;
 }
 
 export interface Audience {

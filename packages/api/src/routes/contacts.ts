@@ -197,6 +197,26 @@ app.get("/:id", async (c) => {
   return c.json({ data: contact });
 });
 
+// Get audiences for a contact
+app.get("/:id/audiences", async (c) => {
+  const auth = c.get("auth" as never) as AuthContext;
+  const contactId = c.req.param("id");
+
+  const rows = await db
+    .select({
+      id: audiences.id,
+      name: audiences.name,
+      addedAt: audienceContacts.addedAt,
+    })
+    .from(audienceContacts)
+    .innerJoin(audiences, eq(audiences.id, audienceContacts.audienceId))
+    .where(
+      sql`${audienceContacts.contactId} = ${contactId} AND ${audiences.orgId} = ${auth.orgId}`
+    );
+
+  return c.json({ data: rows });
+});
+
 // Update contact
 app.put("/:id", async (c) => {
   const auth = c.get("auth" as never) as AuthContext;

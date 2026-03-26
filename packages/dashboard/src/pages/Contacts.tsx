@@ -15,13 +15,18 @@ import {
   Eye,
   Check,
   Info,
+  List,
+  Loader2,
 } from "lucide-react";
 import {
   contactsApi,
+  audiencesApi,
   templates as templatesApi,
   sendingAddressesApi,
   broadcastsApi,
   type Contact,
+  type ContactAudience,
+  type Audience,
   type Template,
   type SendingAddress,
 } from "../lib/api";
@@ -665,6 +670,42 @@ function ContactModal({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
+  // リスト管理（編集モードのみ）
+  const [allAudiences, setAllAudiences] = useState<Audience[]>([]);
+  const [memberOf, setMemberOf] = useState<Set<string>>(new Set());
+  const [listsLoading, setListsLoading] = useState(!!contact);
+  const [togglingList, setTogglingList] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!contact) return;
+    Promise.all([
+      audiencesApi.list(),
+      contactsApi.audiences(contact.id),
+    ]).then(([allRes, memberRes]) => {
+      setAllAudiences(allRes.data);
+      setMemberOf(new Set(memberRes.data.map((a: ContactAudience) => a.id)));
+    }).catch(console.error)
+      .finally(() => setListsLoading(false));
+  }, [contact]);
+
+  async function toggleList(audienceId: string) {
+    if (!contact) return;
+    setTogglingList(audienceId);
+    try {
+      if (memberOf.has(audienceId)) {
+        await audiencesApi.removeContact(audienceId, contact.id);
+        setMemberOf((prev) => { const next = new Set(prev); next.delete(audienceId); return next; });
+      } else {
+        await audiencesApi.addContacts(audienceId, [contact.id]);
+        setMemberOf((prev) => new Set(prev).add(audienceId));
+      }
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "リストの更新に失敗しました");
+    } finally {
+      setTogglingList(null);
+    }
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setSaving(true);
@@ -686,7 +727,7 @@ function ContactModal({
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-md mx-4">
+      <div className="bg-white rounded-xl shadow-xl w-full max-w-md mx-4 max-h-[85vh] flex flex-col">
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
           <h2 className="text-lg font-semibold text-gray-900">
             {contact ? "コンタクト編集" : "コンタクト追加"}
@@ -695,7 +736,7 @@ function ContactModal({
             <X className="w-5 h-5 text-gray-500" />
           </button>
         </div>
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+        <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-6 space-y-4">
           {error && (
             <div className="p-3 bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg">
               {error}
@@ -724,6 +765,55 @@ function ContactModal({
               className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
             />
           </div>
+
+          {/* リスト管理（編集モードのみ） */}
+          {contact && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                <span className="flex items-center gap-1.5">
+                  <List className="w-4 h-4" />
+                  所属リスト
+                </span>
+              </label>
+              {listsLoading ? (
+                <div className="flex items-center gap-2 text-sm text-gray-400 py-2">
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  読み込み中...
+                </div>
+              ) : allAudiences.length === 0 ? (
+                <p className="text-sm text-gray-400">リストがありません</p>
+              ) : (
+                <div className="space-y-1 max-h-40 overflow-y-auto">
+                  {allAudiences.map((aud) => (
+                    <button
+                      key={aud.id}
+                      type="button"
+                      onClick={() => toggleList(aud.id)}
+                      disabled={togglingList === aud.id}
+                      className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-left text-sm transition-colors ${
+                        memberOf.has(aud.id)
+                          ? "bg-indigo-50 text-indigo-700"
+                          : "text-gray-600 hover:bg-gray-50"
+                      } disabled:opacity-50`}
+                    >
+                      <div
+                        className={`w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 ${
+                          memberOf.has(aud.id)
+                            ? "bg-indigo-600 border-indigo-600"
+                            : "border-gray-300"
+                        }`}
+                      >
+                        {memberOf.has(aud.id) && <Check className="w-3 h-3 text-white" />}
+                      </div>
+                      <span className="truncate">{aud.name}</span>
+                      {togglingList === aud.id && <Loader2 className="w-3 h-3 animate-spin ml-auto" />}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
           <div className="flex justify-end gap-3 pt-2">
             <button
               type="button"
