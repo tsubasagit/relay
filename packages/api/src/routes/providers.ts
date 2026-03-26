@@ -1,8 +1,8 @@
 import { Hono } from "hono";
 import { z } from "zod";
-import { eq, and } from "drizzle-orm";
+import { eq, and, isNotNull } from "drizzle-orm";
 import { db } from "../db/client.js";
-import { emailProviders } from "../db/schema.js";
+import { emailProviders, orgMembers, users } from "../db/schema.js";
 import { generateId } from "../utils/id.js";
 import { encrypt, decrypt } from "../utils/crypto.js";
 import { createProvider } from "../services/providers/factory.js";
@@ -105,6 +105,33 @@ app.get("/", async (c) => {
       createdAt: row.createdAt,
     };
   });
+
+  // Gmail OAuth フォールバックが有効な場合、仮想プロバイダーとして追加
+  if (rows.length === 0) {
+    const [member] = await db
+      .select({ email: users.email, createdAt: orgMembers.joinedAt })
+      .from(orgMembers)
+      .innerJoin(users, eq(orgMembers.userId, users.id))
+      .where(
+        and(
+          eq(orgMembers.orgId, auth.orgId),
+          eq(orgMembers.role, "admin"),
+          isNotNull(users.googleRefreshToken)
+        )
+      )
+      .limit(1);
+
+    if (member) {
+      data.push({
+        id: "__gmail_oauth__",
+        name: `Google Workspace（${member.email}）`,
+        type: "gmail-oauth",
+        config: { email: member.email },
+        isDefault: true,
+        createdAt: member.createdAt,
+      });
+    }
+  }
 
   return c.json({ data });
 });
