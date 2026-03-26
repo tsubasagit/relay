@@ -14,7 +14,7 @@ import {
 import { generateId } from "../utils/id.js";
 import { renderTemplate } from "../services/template.js";
 import { processBroadcast } from "../services/broadcast-processor.js";
-import { getContactsByIds } from "../services/contacts-firestore.js";
+import { getContactsByIds } from "../services/contacts-pg.js";
 import type { AuthContext } from "../middleware/combined-auth.js";
 
 const app = new Hono();

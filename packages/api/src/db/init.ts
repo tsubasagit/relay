@@ -1,4 +1,4 @@
-import { neon, escapeIdentifier } from "@neondatabase/serverless";
+import { neon } from "@neondatabase/serverless";
 import { config } from "../config.js";
 
 export async function initDatabase(): Promise<void> {
@@ -156,9 +156,11 @@ export async function initDatabase(): Promise<void> {
       name TEXT,
       metadata JSONB,
       is_unsubscribed BOOLEAN NOT NULL DEFAULT false,
+      type TEXT,
       created_at TEXT NOT NULL
     )`;
   await sql`CREATE UNIQUE INDEX IF NOT EXISTS contacts_org_email_idx ON contacts(org_id, email)`;
+  await sql`ALTER TABLE contacts ADD COLUMN IF NOT EXISTS type TEXT`;
 
   await sql`
     CREATE TABLE IF NOT EXISTS audiences (
@@ -197,26 +199,7 @@ export async function initDatabase(): Promise<void> {
       added_at TEXT NOT NULL,
       PRIMARY KEY (audience_id, contact_id)
     )`;
-  // コンタクト本体は Firestore。古い DB の contact_id→contacts(id) FK を除去（SELECT + sql.query で Neon HTTP 互換）
-  const fkToContacts = await sql`
-    SELECT c.conname AS cname
-    FROM pg_constraint c
-    JOIN pg_class tbl ON c.conrelid = tbl.oid
-    JOIN pg_namespace ns ON tbl.relnamespace = ns.oid
-    JOIN pg_class ref ON c.confrelid = ref.oid
-    JOIN pg_namespace nsref ON ref.relnamespace = nsref.oid
-    WHERE tbl.relname = 'audience_contacts'
-      AND ns.nspname = 'public'
-      AND ref.relname = 'contacts'
-      AND nsref.nspname = 'public'
-      AND c.contype = 'f'
-  `;
-  const fkRows = Array.isArray(fkToContacts) ? fkToContacts : [];
-  for (const row of fkRows as { cname: string }[]) {
-    if (!row?.cname || !/^[a-zA-Z0-9_]+$/.test(row.cname)) continue;
-    const q = `ALTER TABLE audience_contacts DROP CONSTRAINT ${escapeIdentifier(row.cname)}`;
-    await sql.query(q);
-  }
+  // コンタクトはPostgreSQLに統合済み — audience_contacts.contact_id の FK は contacts テーブルを参照
 
   await sql`
     CREATE TABLE IF NOT EXISTS webhooks (

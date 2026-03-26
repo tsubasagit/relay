@@ -4,7 +4,7 @@ import { eq, and, sql, desc } from "drizzle-orm";
 import { db } from "../db/client.js";
 import { audiences, audienceContacts, broadcasts } from "../db/schema.js";
 import { generateId } from "../utils/id.js";
-import { getContact, getContactsByIds } from "../services/contacts-firestore.js";
+import { getContact, getContactsByIds } from "../services/contacts-pg.js";
 import type { AuthContext } from "../middleware/combined-auth.js";
 
 const app = new Hono();

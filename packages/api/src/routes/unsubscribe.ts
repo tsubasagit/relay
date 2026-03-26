@@ -5,7 +5,7 @@ import { unsubscribes } from "../db/schema.js";
 import { generateId } from "../utils/id.js";
 import { dispatchWebhookEvent } from "../services/webhook-dispatcher.js";
 import { buildUnsubscribePayload } from "../services/webhook-events.js";
-import { markContactsUnsubscribedByEmail } from "../services/contacts-firestore.js";
+import { markContactsUnsubscribedByEmail } from "../services/contacts-pg.js";
 import { verifyUnsubscribeToken } from "../services/unsubscribe-helper.js";
 
 const app = new Hono();

@@ -10,7 +10,7 @@ import {
   updateContact,
   deleteContact,
   importContacts,
-} from "../services/contacts-firestore.js";
+} from "../services/contacts-pg.js";
 import { audienceContacts, audiences } from "../db/schema.js";
 import { sql } from "drizzle-orm";
 import { fetchGoogleWorkspaceContacts } from "../services/google-contacts.js";

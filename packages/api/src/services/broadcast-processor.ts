@@ -6,7 +6,7 @@ import {
   emailLogs,
   unsubscribes,
 } from "../db/schema.js";
-import { getContactsByIds } from "./contacts-firestore.js";
+import { getContactsByIds } from "./contacts-pg.js";
 import { generateId } from "../utils/id.js";
 import { sendMail } from "./mailer.js";
 import { renderTemplate } from "./template.js";

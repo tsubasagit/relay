@@ -159,6 +159,7 @@ export const contacts = pgTable("contacts", {
   name: text("name"),
   metadata: jsonb("metadata").$type<Record<string, string>>(),
   isUnsubscribed: boolean("is_unsubscribed").notNull().default(false),
+  type: text("type", { enum: ["individual", "corporate"] }),
   createdAt: text("created_at").notNull(),
 }, (table) => [
   uniqueIndex("contacts_org_email_idx").on(table.orgId, table.email),
