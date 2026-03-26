@@ -279,21 +279,22 @@ export const sendingAddressesApi = {
 
 // ─── Contacts ───
 export const contactsApi = {
-  list: (params?: { search?: string; limit?: number; cursor?: string }) => {
+  list: (params?: { search?: string; limit?: number; cursor?: string; type?: string }) => {
     const sp = new URLSearchParams();
     if (params?.search) sp.set("search", params.search);
     if (params?.limit) sp.set("limit", String(params.limit));
     if (params?.cursor) sp.set("cursor", params.cursor);
+    if (params?.type) sp.set("type", params.type);
     const qs = sp.toString();
     return request<{ data: Contact[]; total: number; nextCursor: string | null }>(`/contacts${qs ? `?${qs}` : ""}`);
   },
   get: (id: string) => request<{ data: Contact }>(`/contacts/${id}`),
-  create: (data: { email: string; name?: string; metadata?: Record<string, string> }) =>
+  create: (data: { email: string; name?: string; metadata?: Record<string, string>; type?: ContactType }) =>
     request<{ data: Contact }>("/contacts", {
       method: "POST",
       body: JSON.stringify(data),
     }),
-  update: (id: string, data: { email?: string; name?: string; metadata?: Record<string, string> }) =>
+  update: (id: string, data: { email?: string; name?: string; metadata?: Record<string, string>; type?: ContactType | null }) =>
     request<{ data: Contact }>(`/contacts/${id}`, {
       method: "PUT",
       body: JSON.stringify(data),
@@ -623,12 +624,15 @@ export interface SendingAddress {
   createdAt: string;
 }
 
+export type ContactType = "individual" | "corporate";
+
 export interface Contact {
   id: string;
   email: string;
   name: string | null;
   metadata: Record<string, string> | null;
   isUnsubscribed: boolean;
+  type: ContactType | null;
   createdAt: string;
 }
 

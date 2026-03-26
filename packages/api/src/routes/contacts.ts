@@ -18,10 +18,13 @@ import type { AuthContext } from "../middleware/combined-auth.js";
 
 const app = new Hono();
 
+const contactTypeEnum = z.enum(["individual", "corporate"]);
+
 const contactSchema = z.object({
   email: z.string().email(),
   name: z.string().optional(),
   metadata: z.record(z.string()).optional(),
+  type: contactTypeEnum.optional(),
 });
 
 // List contacts
@@ -30,8 +33,10 @@ app.get("/", async (c) => {
   const search = c.req.query("search");
   const limit = Math.min(parseInt(c.req.query("limit") || "50"), 200);
   const cursor = c.req.query("cursor") || undefined;
+  const typeParam = c.req.query("type") as "individual" | "corporate" | "none" | undefined;
+  const type = typeParam && ["individual", "corporate", "none"].includes(typeParam) ? typeParam : undefined;
 
-  const result = await listContacts(auth.orgId, { search, limit, cursor });
+  const result = await listContacts(auth.orgId, { search, limit, cursor, type });
   return c.json({ data: result.data, total: result.total, limit, nextCursor: result.nextCursor });
 });
 
@@ -49,6 +54,7 @@ app.post("/", async (c) => {
       email: parsed.data.email,
       name: parsed.data.name ?? null,
       metadata: parsed.data.metadata ?? null,
+      type: parsed.data.type ?? null,
     });
     return c.json({ data: contact }, 201);
   } catch (err) {
@@ -149,17 +155,20 @@ app.post("/import", async (c) => {
     return c.json({ error: "CSV must have an 'email' column" }, 400);
   }
   const nameIdx = headers.indexOf("name");
+  const typeIdx = headers.indexOf("type");
 
-  const items: { email: string; name: string | null; metadata: Record<string, string> | null }[] = [];
+  const items: { email: string; name: string | null; metadata: Record<string, string> | null; type?: "individual" | "corporate" | null }[] = [];
 
   for (let i = 1; i < lines.length; i++) {
     const values = lines[i].split(",").map((v) => v.trim().replace(/^"(.*)"$/, "$1"));
     const email = values[emailIdx];
     const name = nameIdx >= 0 ? values[nameIdx] || null : null;
+    const typeVal = typeIdx >= 0 ? values[typeIdx]?.toLowerCase() : null;
+    const type = typeVal === "individual" || typeVal === "corporate" ? typeVal : null;
 
     const metadata: Record<string, string> = {};
     headers.forEach((h, idx) => {
-      if (idx !== emailIdx && idx !== nameIdx && values[idx]) {
+      if (idx !== emailIdx && idx !== nameIdx && idx !== typeIdx && values[idx]) {
         metadata[h] = values[idx];
       }
     });
@@ -168,6 +177,7 @@ app.post("/import", async (c) => {
       email,
       name,
       metadata: Object.keys(metadata).length > 0 ? metadata : null,
+      type,
     });
   }
 
@@ -197,6 +207,7 @@ app.put("/:id", async (c) => {
     email: z.string().email().optional(),
     name: z.string().optional(),
     metadata: z.record(z.string()).optional(),
+    type: contactTypeEnum.nullable().optional(),
   });
 
   const parsed = updateSchema.safeParse(body);
