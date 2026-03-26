@@ -1,4 +1,4 @@
-import { eq, and, isNotNull } from "drizzle-orm";
+import { eq, and, isNotNull, sql } from "drizzle-orm";
 import { db } from "../db/client.js";
 import { emailQuota, organizations, orgMembers, users } from "../db/schema.js";
 import { generateId } from "../utils/id.js";
@@ -47,30 +47,51 @@ async function checkAndIncrementQuota(orgId: string): Promise<void> {
 
   const limit = QUOTA_LIMITS[org?.plan || "free"] || QUOTA_LIMITS.free;
 
-  // 本日のクォータ取得 or 作成
-  const [existing] = await db
-    .select()
-    .from(emailQuota)
+  // アトミックにクォータをインクリメント（UPSERTパターン）
+  // まず既存レコードをアトミックに+1して返す
+  const [updated] = await db
+    .update(emailQuota)
+    .set({ sentCount: sql`${emailQuota.sentCount} + 1` })
     .where(and(eq(emailQuota.orgId, orgId), eq(emailQuota.date, today)))
-    .limit(1);
+    .returning({ sentCount: emailQuota.sentCount });
 
-  if (existing) {
-    if (existing.sentCount >= limit) {
+  if (updated) {
+    // 更新後のカウントがリミットを超えていたら、ロールバック的に-1して拒否
+    if (updated.sentCount > limit) {
+      await db
+        .update(emailQuota)
+        .set({ sentCount: sql`${emailQuota.sentCount} - 1` })
+        .where(and(eq(emailQuota.orgId, orgId), eq(emailQuota.date, today)));
       throw new Error(
         `本日の送信上限（${limit}通）に達しました。明日以降にお試しください。`
       );
     }
-    await db
-      .update(emailQuota)
-      .set({ sentCount: existing.sentCount + 1 })
-      .where(eq(emailQuota.id, existing.id));
   } else {
-    await db.insert(emailQuota).values({
-      id: generateId("quota"),
-      orgId,
-      date: today,
-      sentCount: 1,
-    });
+    // レコードがなければ新規作成（初回送信）
+    try {
+      await db.insert(emailQuota).values({
+        id: generateId("quota"),
+        orgId,
+        date: today,
+        sentCount: 1,
+      });
+    } catch {
+      // 同時に別リクエストがinsertした場合、updateにフォールバック
+      const [retried] = await db
+        .update(emailQuota)
+        .set({ sentCount: sql`${emailQuota.sentCount} + 1` })
+        .where(and(eq(emailQuota.orgId, orgId), eq(emailQuota.date, today)))
+        .returning({ sentCount: emailQuota.sentCount });
+      if (retried && retried.sentCount > limit) {
+        await db
+          .update(emailQuota)
+          .set({ sentCount: sql`${emailQuota.sentCount} - 1` })
+          .where(and(eq(emailQuota.orgId, orgId), eq(emailQuota.date, today)));
+        throw new Error(
+          `本日の送信上限（${limit}通）に達しました。明日以降にお試しください。`
+        );
+      }
+    }
   }
 }
 

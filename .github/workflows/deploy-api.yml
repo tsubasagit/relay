@@ -53,9 +53,9 @@ jobs:
             --platform=managed \
             --allow-unauthenticated \
             --port=8080 \
-            --memory=512Mi \
-            --min-instances=0 \
-            --max-instances=3 \
+            --memory=1Gi \
+            --min-instances=1 \
+            --max-instances=100 \
             --set-env-vars="DATABASE_URL=${{ secrets.DATABASE_URL }}" \
             --set-env-vars="API_BASE_URL=https://relay-api-824939762247.asia-northeast1.run.app" \
             --set-env-vars="SESSION_SECRET=${{ secrets.SESSION_SECRET }}" \

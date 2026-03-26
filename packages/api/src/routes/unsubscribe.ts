@@ -6,30 +6,13 @@ import { generateId } from "../utils/id.js";
 import { dispatchWebhookEvent } from "../services/webhook-dispatcher.js";
 import { buildUnsubscribePayload } from "../services/webhook-events.js";
 import { markContactsUnsubscribedByEmail } from "../services/contacts-firestore.js";
+import { verifyUnsubscribeToken } from "../services/unsubscribe-helper.js";
 
 const app = new Hono();
 
-// Token format: base64url(orgId:email)
-function decodeToken(token: string): { orgId: string; email: string } | null {
-  try {
-    const decoded = Buffer.from(token, "base64url").toString("utf-8");
-    const colonIdx = decoded.indexOf(":");
-    if (colonIdx === -1) {
-      // Legacy format: just email (no orgId) — treat as invalid
-      return null;
-    }
-    return {
-      orgId: decoded.slice(0, colonIdx),
-      email: decoded.slice(colonIdx + 1),
-    };
-  } catch {
-    return null;
-  }
-}
-
 // Unsubscribe landing page (GET)
 app.get("/:token", async (c) => {
-  const parsed = decodeToken(c.req.param("token"));
+  const parsed = verifyUnsubscribeToken(c.req.param("token"));
   if (!parsed) {
     return c.html("<h1>Invalid link</h1>", 400);
   }
@@ -64,7 +47,7 @@ app.get("/:token", async (c) => {
 
 // RFC 8058 one-click unsubscribe (POST with List-Unsubscribe=One-Click body)
 app.post("/:token", async (c) => {
-  const parsed = decodeToken(c.req.param("token"));
+  const parsed = verifyUnsubscribeToken(c.req.param("token"));
   if (!parsed) {
     return c.html("<h1>Invalid link</h1>", 400);
   }

@@ -1,9 +1,20 @@
+function escapeHtml(str: string): string {
+  return str
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 export function renderTemplate(
   html: string,
   variables: Record<string, string>
 ): string {
   return html.replace(/\{\{(\w+)\}\}/g, (match, key) => {
-    return variables[key] ?? match;
+    const value = variables[key];
+    if (value === undefined) return match;
+    return escapeHtml(value);
   });
 }
 
