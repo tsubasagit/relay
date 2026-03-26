@@ -39,7 +39,7 @@ async function migrate() {
 
   // 全組織を取得
   const orgsResult = await sqlClient`SELECT id FROM organizations`;
-  const orgs = Array.isArray(orgsResult) ? orgsResult : orgsResult.rows || [];
+  const orgs = Array.isArray(orgsResult) ? orgsResult : (orgsResult as any).rows || [];
   console.log(`${orgs.length} organizations found\n`);
 
   let totalMigrated = 0;
