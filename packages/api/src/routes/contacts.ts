@@ -168,8 +168,9 @@ app.post("/import", async (c) => {
   }
   const nameIdx = headers.indexOf("name");
   const typeIdx = headers.indexOf("type");
+  const listIdx = headers.indexOf("list");
 
-  const items: { email: string; name: string | null; metadata: Record<string, string> | null; type?: "individual" | "corporate" | null }[] = [];
+  const items: { email: string; name: string | null; metadata: Record<string, string> | null; type?: "individual" | "corporate" | null; lists?: string[] }[] = [];
 
   for (let i = 1; i < lines.length; i++) {
     const values = lines[i].split(",").map((v) => v.trim().replace(/^"(.*)"$/, "$1"));
@@ -178,9 +179,15 @@ app.post("/import", async (c) => {
     const typeVal = typeIdx >= 0 ? values[typeIdx]?.toLowerCase() : null;
     const type = typeVal === "individual" || typeVal === "corporate" ? typeVal : null;
 
+    // list列: セミコロン区切りで複数リスト指定可（例: "顧客リスト;メルマガ"）
+    const lists = listIdx >= 0 && values[listIdx]
+      ? values[listIdx].split(";").map((l) => l.trim()).filter(Boolean)
+      : undefined;
+
+    const reservedIdx = new Set([emailIdx, nameIdx, typeIdx, listIdx]);
     const metadata: Record<string, string> = {};
     headers.forEach((h, idx) => {
-      if (idx !== emailIdx && idx !== nameIdx && idx !== typeIdx && values[idx]) {
+      if (!reservedIdx.has(idx) && values[idx]) {
         metadata[h] = values[idx];
       }
     });
@@ -190,6 +197,7 @@ app.post("/import", async (c) => {
       name,
       metadata: Object.keys(metadata).length > 0 ? metadata : null,
       type,
+      lists,
     });
   }
 

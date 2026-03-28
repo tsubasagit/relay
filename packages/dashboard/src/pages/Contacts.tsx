@@ -849,6 +849,8 @@ function ImportModal({
     imported: number;
     skipped: number;
     total: number;
+    listsCreated?: number;
+    listsAssigned?: number;
   } | null>(null);
   const [error, setError] = useState("");
 
@@ -893,6 +895,12 @@ function ImportModal({
                   <p>インポート: {result.imported}件</p>
                   <p>スキップ（重複等）: {result.skipped}件</p>
                   <p>合計: {result.total}件</p>
+                  {(result.listsCreated || 0) > 0 && (
+                    <p>リスト新規作成: {result.listsCreated}件</p>
+                  )}
+                  {(result.listsAssigned || 0) > 0 && (
+                    <p>リスト登録: {result.listsAssigned}件</p>
+                  )}
                 </div>
               </div>
               <div className="flex justify-end">
@@ -907,9 +915,16 @@ function ImportModal({
           ) : (
             <>
               <div>
-                <p className="text-sm text-gray-600 mb-3">
-                  CSVファイルをアップロードしてください。email列は必須です。name列は任意です。その他の列はmetadataとして保存されます。
+                <p className="text-sm text-gray-600 mb-2">
+                  CSVファイルをアップロードしてください。
                 </p>
+                <div className="text-xs text-gray-500 bg-gray-50 rounded-lg p-3 mb-3 font-mono">
+                  <p className="font-sans font-medium text-gray-700 mb-1">CSVフォーマット例:</p>
+                  <p>name,email,list</p>
+                  <p>田中太郎,tanaka@example.com,顧客リスト</p>
+                  <p>鈴木花子,suzuki@example.com,顧客リスト;メルマガ</p>
+                  <p className="mt-1 font-sans text-gray-400">※ list列はセミコロン(;)区切りで複数指定可</p>
+                </div>
                 <input
                   type="file"
                   accept=".csv"

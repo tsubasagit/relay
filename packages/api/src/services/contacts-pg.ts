@@ -1,6 +1,6 @@
 import { eq, and, or, ilike, sql, desc, inArray } from "drizzle-orm";
 import { db } from "../db/client.js";
-import { contacts } from "../db/schema.js";
+import { contacts, audiences, audienceContacts } from "../db/schema.js";
 import { generateId } from "../utils/id.js";
 
 export type ContactType = "individual" | "corporate";
@@ -187,20 +187,22 @@ export async function getContactsByIds(orgId: string, contactIds: string[]): Pro
 
 export async function importContacts(
   orgId: string,
-  items: { email: string; name: string | null; metadata: Record<string, string> | null; type?: ContactType | null }[]
-): Promise<{ imported: number; skipped: number }> {
+  items: { email: string; name: string | null; metadata: Record<string, string> | null; type?: ContactType | null; lists?: string[] }[]
+): Promise<{ imported: number; skipped: number; listsCreated: number; listsAssigned: number }> {
   const now = new Date().toISOString();
 
   // Get existing emails for dedup counting
   const existingRows = await db
-    .select({ email: contacts.email })
+    .select({ id: contacts.id, email: contacts.email })
     .from(contacts)
     .where(eq(contacts.orgId, orgId));
-  const existingEmails = new Set(existingRows.map((r) => r.email.toLowerCase()));
+  const existingEmailMap = new Map(existingRows.map((r) => [r.email.toLowerCase(), r.id]));
 
   let imported = 0;
   let skipped = 0;
   const batch: (typeof contacts.$inferInsert)[] = [];
+  // email -> contactId mapping for list assignment
+  const emailToId = new Map<string, string>();
 
   for (const item of items) {
     if (!item.email || !item.email.includes("@")) {
@@ -208,13 +210,19 @@ export async function importContacts(
       continue;
     }
 
-    if (existingEmails.has(item.email.toLowerCase())) {
+    const emailLower = item.email.toLowerCase();
+    const existingId = existingEmailMap.get(emailLower);
+
+    if (existingId) {
+      // Already exists - still track for list assignment
+      emailToId.set(emailLower, existingId);
       skipped++;
       continue;
     }
 
+    const id = generateId("ct");
     batch.push({
-      id: generateId("ct"),
+      id,
       orgId,
       email: item.email,
       name: item.name,
@@ -224,7 +232,8 @@ export async function importContacts(
       createdAt: now,
     });
 
-    existingEmails.add(item.email.toLowerCase());
+    existingEmailMap.set(emailLower, id);
+    emailToId.set(emailLower, id);
     imported++;
   }
 
@@ -236,7 +245,94 @@ export async function importContacts(
     }
   }
 
-  return { imported, skipped };
+  // Process list assignments
+  let listsCreated = 0;
+  let listsAssigned = 0;
+
+  // Collect all unique list names
+  const listNameSet = new Set<string>();
+  for (const item of items) {
+    if (item.lists) {
+      for (const name of item.lists) {
+        if (name.trim()) listNameSet.add(name.trim());
+      }
+    }
+  }
+
+  if (listNameSet.size > 0) {
+    // Get existing audiences
+    const existingAudiences = await db
+      .select({ id: audiences.id, name: audiences.name })
+      .from(audiences)
+      .where(eq(audiences.orgId, orgId));
+    const audienceNameMap = new Map(existingAudiences.map((a) => [a.name, a.id]));
+
+    // Create missing audiences
+    for (const name of listNameSet) {
+      if (!audienceNameMap.has(name)) {
+        const audId = generateId("aud");
+        await db.insert(audiences).values({
+          id: audId,
+          orgId,
+          name,
+          description: null,
+          contactCount: 0,
+          createdAt: now,
+        });
+        audienceNameMap.set(name, audId);
+        listsCreated++;
+      }
+    }
+
+    // Build audience -> contactIds mapping
+    const audienceContactsMap = new Map<string, Set<string>>();
+    for (const item of items) {
+      if (!item.lists || !item.email) continue;
+      const contactId = emailToId.get(item.email.toLowerCase());
+      if (!contactId) continue;
+
+      for (const listName of item.lists) {
+        const trimmed = listName.trim();
+        if (!trimmed) continue;
+        const audId = audienceNameMap.get(trimmed);
+        if (!audId) continue;
+
+        if (!audienceContactsMap.has(audId)) {
+          audienceContactsMap.set(audId, new Set());
+        }
+        audienceContactsMap.get(audId)!.add(contactId);
+      }
+    }
+
+    // Get existing audience_contacts to avoid duplicates
+    for (const [audId, contactIdSet] of audienceContactsMap) {
+      const existingAC = await db
+        .select({ contactId: audienceContacts.contactId })
+        .from(audienceContacts)
+        .where(eq(audienceContacts.audienceId, audId));
+      const existingSet = new Set(existingAC.map((r) => r.contactId));
+
+      const newEntries = [...contactIdSet]
+        .filter((cId) => !existingSet.has(cId))
+        .map((cId) => ({ audienceId: audId, contactId: cId, addedAt: now }));
+
+      if (newEntries.length > 0) {
+        for (let i = 0; i < newEntries.length; i += 500) {
+          const chunk = newEntries.slice(i, i + 500);
+          await db.insert(audienceContacts).values(chunk).onConflictDoNothing();
+        }
+        listsAssigned += newEntries.length;
+
+        // Update contact count
+        await db
+          .update(audiences)
+          .set({ contactCount: sql`${audiences.contactCount} + ${newEntries.length}` })
+          .where(eq(audiences.id, audId));
+      }
+    }
+  }
+
+  return { imported, skipped, listsCreated, listsAssigned };
 }
 
 export async function markContactsUnsubscribedByEmail(orgId: string, email: string): Promise<number> {
