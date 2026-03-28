@@ -446,10 +446,34 @@ export const compose = {
     subject?: string;
     bodyHtml?: string;
     variables?: Record<string, string>;
+    action?: "send" | "draft" | "schedule";
+    scheduledAt?: string;
   }) =>
-    request<{ data: { id: string; status: string; totalCount: number; subject: string } }>(
+    request<{ data: { id: string; status: string; totalCount: number; subject: string; scheduledAt?: string | null } }>(
       "/compose/send",
       { method: "POST", body: JSON.stringify(data) }
+    ),
+  get: (id: string) =>
+    request<{ data: { id: string; contactIds: string[]; fromAddressId: string; templateId: string; subject: string; bodyHtml: string; variables: Record<string, string>; scheduledAt: string | null; status: string } }>(
+      `/compose/${id}`
+    ),
+  update: (id: string, data: {
+    contactIds?: string[];
+    fromAddressId?: string;
+    subject?: string;
+    bodyHtml?: string;
+    variables?: Record<string, string>;
+    action?: "draft" | "schedule";
+    scheduledAt?: string;
+  }) =>
+    request<{ data: { id: string; status: string } }>(
+      `/compose/${id}`,
+      { method: "PUT", body: JSON.stringify(data) }
+    ),
+  sendDraft: (id: string) =>
+    request<{ data: { id: string; status: string; totalCount: number; sentCount: number; failedCount: number; subject: string } }>(
+      `/compose/${id}/send`,
+      { method: "POST" }
     ),
 };
 

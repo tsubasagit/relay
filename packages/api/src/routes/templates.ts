@@ -134,9 +134,23 @@ app.post("/:id/test", async (c) => {
 
   const subject = `[TEST] ${renderTemplate(tmpl.subject, parsed.data.variables || {})}`;
   const html = renderTemplate(tmpl.bodyHtml, parsed.data.variables || {});
-  const text = tmpl.bodyText
+  let text: string | undefined = tmpl.bodyText
     ? renderTemplate(tmpl.bodyText, parsed.data.variables || {})
     : undefined;
+
+  // Auto-generate plain text from HTML if not provided
+  if (!text && html) {
+    text = html
+      .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, "")
+      .replace(/<[^>]+>/g, "")
+      .replace(/&nbsp;/g, " ")
+      .replace(/&amp;/g, "&")
+      .replace(/&lt;/g, "<")
+      .replace(/&gt;/g, ">")
+      .replace(/&#?\w+;/g, "")
+      .replace(/\n{3,}/g, "\n\n")
+      .trim();
+  }
 
   try {
     await sendMail(auth.orgId, {

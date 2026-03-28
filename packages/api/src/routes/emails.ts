@@ -115,6 +115,20 @@ app.post("/send", async (c) => {
     createdAt: now,
   });
 
+  // Auto-generate plain text from HTML if not provided (improves Gmail inbox placement)
+  if (!text && html) {
+    text = html
+      .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, "")
+      .replace(/<[^>]+>/g, "")
+      .replace(/&nbsp;/g, " ")
+      .replace(/&amp;/g, "&")
+      .replace(/&lt;/g, "<")
+      .replace(/&gt;/g, ">")
+      .replace(/&#?\w+;/g, "")
+      .replace(/\n{3,}/g, "\n\n")
+      .trim();
+  }
+
   // Send email
   try {
     await sendMail(auth.orgId, { from: fromAddress, to, subject, html, text, headers: emailHeaders });

@@ -18,7 +18,7 @@ import { config } from "../config.js";
 export async function processBroadcast(
   orgId: string,
   broadcastId: string,
-  audienceId: string,
+  audienceId: string | null,
   tmpl: {
     id: string;
     subject: string;
@@ -28,16 +28,27 @@ export async function processBroadcast(
   },
   fromAddress: string,
   variables: Record<string, string>,
-  replyTo?: string
+  replyTo?: string,
+  directContactIds?: string[]
 ) {
   try {
-    // Get contactIds from PG, then batch-fetch from Firestore
-    const acRows = await db
-      .select({ contactId: audienceContacts.contactId })
-      .from(audienceContacts)
-      .where(eq(audienceContacts.audienceId, audienceId));
-
-    const contactIds = acRows.map((r) => r.contactId);
+    // Get contacts: use directContactIds or look up from audienceContacts
+    let contactIds: string[];
+    if (directContactIds && directContactIds.length > 0) {
+      contactIds = directContactIds;
+    } else if (audienceId) {
+      const acRows = await db
+        .select({ contactId: audienceContacts.contactId })
+        .from(audienceContacts)
+        .where(eq(audienceContacts.audienceId, audienceId));
+      contactIds = acRows.map((r) => r.contactId);
+    } else {
+      await db
+        .update(broadcasts)
+        .set({ status: "completed", completedAt: new Date().toISOString() })
+        .where(eq(broadcasts.id, broadcastId));
+      return;
+    }
     const members = await getContactsByIds(orgId, contactIds);
 
     // Get unsubscribed emails for this org
@@ -76,6 +87,20 @@ export async function processBroadcast(
       let text: string | undefined;
       if (tmpl.bodyText) {
         text = renderTemplate(tmpl.bodyText, mergedVars);
+      }
+
+      // Auto-generate plain text from HTML if not provided
+      if (!text && html) {
+        text = html
+          .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, "")
+          .replace(/<[^>]+>/g, "")
+          .replace(/&nbsp;/g, " ")
+          .replace(/&amp;/g, "&")
+          .replace(/&lt;/g, "<")
+          .replace(/&gt;/g, ">")
+          .replace(/&#?\w+;/g, "")
+          .replace(/\n{3,}/g, "\n\n")
+          .trim();
       }
 
       // Add unsubscribe footer & headers for marketing emails

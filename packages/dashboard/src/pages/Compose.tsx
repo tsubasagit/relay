@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { Send, Search, List } from "lucide-react";
+import { Send, Search, List, Clock, Save } from "lucide-react";
 import {
   contactsApi,
   sendingAddressesApi,
@@ -17,6 +17,7 @@ export default function Compose() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const initialListId = searchParams.get("listId") || "";
+  const draftIdParam = searchParams.get("draftId");
 
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [addresses, setAddresses] = useState<SendingAddress[]>([]);
@@ -33,9 +34,15 @@ export default function Compose() {
   const [bodyHtml, setBodyHtml] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [sending, setSending] = useState(false);
+  const [savingDraft, setSavingDraft] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [listLoading, setListLoading] = useState(false);
+
+  // Draft / Schedule state
+  const [draftId, setDraftId] = useState<string | null>(null);
+  const [sendMode, setSendMode] = useState<"send" | "schedule">("send");
+  const [scheduledAt, setScheduledAt] = useState("");
 
   useEffect(() => {
     Promise.all([
@@ -54,6 +61,27 @@ export default function Compose() {
       .catch(console.error)
       .finally(() => setLoading(false));
   }, []);
+
+  // Load draft data
+  useEffect(() => {
+    if (!loading && draftIdParam) {
+      compose
+        .get(draftIdParam)
+        .then((res) => {
+          const d = res.data;
+          setDraftId(draftIdParam);
+          setSelectedContactIds(new Set(d.contactIds));
+          if (d.fromAddressId) setFromAddressId(d.fromAddressId);
+          setSubject(d.subject);
+          setBodyHtml(d.bodyHtml);
+          if (d.scheduledAt) {
+            setSendMode("schedule");
+            setScheduledAt(d.scheduledAt.slice(0, 16));
+          }
+        })
+        .catch(console.error);
+    }
+  }, [loading, draftIdParam]);
 
   // initialListId が設定されている場合、データロード後にリスト選択を実行
   useEffect(() => {
@@ -131,6 +159,45 @@ export default function Compose() {
     [templateList]
   );
 
+  const handleSaveDraft = async () => {
+    setError("");
+    setSuccess("");
+
+    if (selectedContactIds.size === 0) {
+      setError("宛先を選択してください");
+      return;
+    }
+
+    setSavingDraft(true);
+    try {
+      if (draftId) {
+        await compose.update(draftId, {
+          contactIds: Array.from(selectedContactIds),
+          fromAddressId: fromAddressId || undefined,
+          subject: selectedTemplateId ? undefined : subject,
+          bodyHtml: selectedTemplateId ? undefined : bodyHtml,
+          action: "draft",
+        });
+        setSuccess("下書きを更新しました");
+      } else {
+        const res = await compose.send({
+          contactIds: Array.from(selectedContactIds),
+          fromAddressId: fromAddressId || undefined,
+          templateId: selectedTemplateId || undefined,
+          subject: selectedTemplateId ? undefined : subject,
+          bodyHtml: selectedTemplateId ? undefined : bodyHtml,
+          action: "draft",
+        });
+        setDraftId(res.data.id);
+        setSuccess("下書きを保存しました");
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "保存に失敗しました");
+    } finally {
+      setSavingDraft(false);
+    }
+  };
+
   const handleSend = async () => {
     setError("");
     setSuccess("");
@@ -147,18 +214,37 @@ export default function Compose() {
       setError("本文を入力してください");
       return;
     }
+    if (sendMode === "schedule" && !scheduledAt) {
+      setError("送信日時を指定してください");
+      return;
+    }
 
     setSending(true);
     try {
+      if (draftId && sendMode === "send") {
+        // Send existing draft directly
+        const res = await compose.sendDraft(draftId);
+        setSuccess(`${res.data.totalCount}件のメールを送信開始しました（${res.data.subject}）`);
+        navigate(`/broadcasts/${res.data.id}`);
+        return;
+      }
+
+      const action = sendMode === "schedule" ? "schedule" : "send";
       const res = await compose.send({
         contactIds: Array.from(selectedContactIds),
         fromAddressId: fromAddressId || undefined,
         templateId: selectedTemplateId || undefined,
         subject: selectedTemplateId ? undefined : subject,
         bodyHtml: selectedTemplateId ? undefined : bodyHtml,
+        action,
+        scheduledAt: sendMode === "schedule" ? new Date(scheduledAt).toISOString() : undefined,
       });
-      const msg = `${res.data.totalCount}件のメールを送信開始しました（${res.data.subject}）`;
-      setSuccess(msg);
+
+      if (action === "schedule") {
+        setSuccess("送信予約を設定しました");
+      } else {
+        setSuccess(`${res.data.totalCount}件のメールを送信開始しました（${res.data.subject}）`);
+      }
       navigate(`/broadcasts/${res.data.id}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "送信に失敗しました");
@@ -177,7 +263,9 @@ export default function Compose() {
 
   return (
     <div className="max-w-3xl mx-auto">
-      <h1 className="text-2xl font-bold text-gray-900 mb-6">メール作成</h1>
+      <h1 className="text-2xl font-bold text-gray-900 mb-6">
+        {draftId ? "下書きを編集" : "メール作成"}
+      </h1>
 
       {error && (
         <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm">
@@ -370,10 +458,50 @@ export default function Compose() {
             <textarea
               value={bodyHtml}
               onChange={(e) => setBodyHtml(e.target.value)}
-              placeholder="メール本文を入力してください&#10;&#10;変数を使う場合: {{name}} {{company}} など"
+              placeholder={"メール本文を入力してください\n\n変数を使う場合: {{name}} {{company}} など"}
               rows={10}
               className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
             />
+          </div>
+        </div>
+
+        {/* 送信オプション */}
+        <div className="bg-white rounded-xl border border-gray-200 p-5">
+          <label className="block text-sm font-medium text-gray-700 mb-3">
+            送信オプション
+          </label>
+          <div className="space-y-3">
+            <label className="flex items-center gap-3 cursor-pointer">
+              <input
+                type="radio"
+                name="sendMode"
+                checked={sendMode === "send"}
+                onChange={() => setSendMode("send")}
+                className="w-4 h-4 text-indigo-600 focus:ring-indigo-500"
+              />
+              <span className="text-sm text-gray-900">今すぐ送信</span>
+            </label>
+            <label className="flex items-center gap-3 cursor-pointer">
+              <input
+                type="radio"
+                name="sendMode"
+                checked={sendMode === "schedule"}
+                onChange={() => setSendMode("schedule")}
+                className="w-4 h-4 text-indigo-600 focus:ring-indigo-500"
+              />
+              <span className="text-sm text-gray-900">送信予約</span>
+            </label>
+            {sendMode === "schedule" && (
+              <div className="ml-7">
+                <input
+                  type="datetime-local"
+                  value={scheduledAt}
+                  onChange={(e) => setScheduledAt(e.target.value)}
+                  min={new Date().toISOString().slice(0, 16)}
+                  className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                />
+              </div>
+            )}
           </div>
         </div>
 
@@ -386,12 +514,29 @@ export default function Compose() {
             キャンセル
           </button>
           <button
+            onClick={handleSaveDraft}
+            disabled={savingDraft || selectedContactIds.size === 0}
+            className="flex items-center gap-2 px-5 py-2.5 border-2 border-gray-300 text-gray-700 rounded-lg text-sm font-medium hover:border-gray-400 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          >
+            <Save className="w-4 h-4" />
+            {savingDraft ? "保存中..." : "下書き保存"}
+          </button>
+          <button
             onClick={handleSend}
             disabled={sending || selectedContactIds.size === 0}
             className="flex items-center gap-2 px-6 py-2.5 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
-            <Send className="w-4 h-4" />
-            {sending ? "送信中..." : `送信（${selectedContactIds.size}件）`}
+            {sendMode === "schedule" ? (
+              <>
+                <Clock className="w-4 h-4" />
+                {sending ? "予約中..." : "予約する"}
+              </>
+            ) : (
+              <>
+                <Send className="w-4 h-4" />
+                {sending ? "送信中..." : `送信（${selectedContactIds.size}件）`}
+              </>
+            )}
           </button>
         </div>
       </div>

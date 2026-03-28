@@ -176,12 +176,13 @@ export async function initDatabase(): Promise<void> {
     CREATE TABLE IF NOT EXISTS broadcasts (
       id TEXT PRIMARY KEY,
       org_id TEXT NOT NULL REFERENCES organizations(id),
-      audience_id TEXT NOT NULL REFERENCES audiences(id),
+      audience_id TEXT REFERENCES audiences(id),
       template_id TEXT NOT NULL REFERENCES templates(id),
       from_address_id TEXT NOT NULL,
       from_address TEXT NOT NULL,
       subject TEXT NOT NULL,
       variables JSONB,
+      contact_ids JSONB,
       scheduled_at TEXT,
       status TEXT NOT NULL DEFAULT 'draft',
       total_count INTEGER NOT NULL DEFAULT 0,
@@ -191,6 +192,9 @@ export async function initDatabase(): Promise<void> {
       created_at TEXT NOT NULL,
       completed_at TEXT
     )`;
+  // 既存DBへのマイグレーション: audience_id の NOT NULL 制約を外し、contact_ids カラムを追加
+  await sql`ALTER TABLE broadcasts ALTER COLUMN audience_id DROP NOT NULL`.catch(() => {});
+  await sql`ALTER TABLE broadcasts ADD COLUMN IF NOT EXISTS contact_ids JSONB`;
 
   await sql`
     CREATE TABLE IF NOT EXISTS audience_contacts (

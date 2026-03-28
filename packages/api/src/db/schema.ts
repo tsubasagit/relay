@@ -177,12 +177,13 @@ export const audiences = pgTable("audiences", {
 export const broadcasts = pgTable("broadcasts", {
   id: text("id").primaryKey(),
   orgId: text("org_id").notNull().references(() => organizations.id),
-  audienceId: text("audience_id").notNull().references(() => audiences.id),
+  audienceId: text("audience_id").references(() => audiences.id),
   templateId: text("template_id").notNull().references(() => templates.id),
   fromAddressId: text("from_address_id").notNull(),
   fromAddress: text("from_address").notNull(),
   subject: text("subject").notNull(),
   variables: jsonb("variables").$type<Record<string, string>>(),
+  contactIds: jsonb("contact_ids").$type<string[]>(),
   scheduledAt: text("scheduled_at"),
   status: text("status", {
     enum: ["draft", "scheduled", "sending", "completed", "failed"],
