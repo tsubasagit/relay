@@ -21,6 +21,7 @@ import audienceRoutes from "./routes/audiences.js";
 import broadcastRoutes from "./routes/broadcasts.js";
 import webhookRoutes from "./routes/webhooks.js";
 import composeRoutes from "./routes/compose.js";
+import schedulerRoutes from "./routes/scheduler.js";
 
 const app = new Hono();
 
@@ -57,6 +58,7 @@ app.use("/unsubscribe/*", rateLimitByIp(60_000, 30));
 // ─── Public routes (no auth) ───
 app.route("/api/health", healthRoutes);
 app.route("/api/t", trackingRoutes);
+app.route("/api/scheduler", schedulerRoutes);
 app.route("/unsubscribe", unsubscribeRoutes);
 
 // ─── Auth routes (partially public) ───

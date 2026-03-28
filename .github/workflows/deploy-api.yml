@@ -66,6 +66,7 @@ jobs:
             --set-env-vars="DASHBOARD_URL=https://relay-email-ath.web.app" \
             --set-env-vars="NODE_ENV=production" \
             --set-env-vars="FIREBASE_PROJECT_ID=relay-email-ath" \
+            --set-env-vars="SCHEDULER_SECRET=${{ secrets.SCHEDULER_SECRET }}" \
             --project=${{ env.PROJECT_ID }} \
             --quiet
 
@@ -75,3 +76,20 @@ jobs:
             --region=${{ env.REGION }} \
             --project=${{ env.PROJECT_ID }} \
             --format='value(status.url)'
+
+      - name: Create Cloud Scheduler job (if not exists)
+        run: |
+          gcloud scheduler jobs describe relay-process-scheduled \
+            --location=${{ env.REGION }} \
+            --project=${{ env.PROJECT_ID }} \
+            --quiet 2>/dev/null \
+          || gcloud scheduler jobs create http relay-process-scheduled \
+            --location=${{ env.REGION }} \
+            --schedule="*/5 * * * *" \
+            --uri="https://relay-api-824939762247.asia-northeast1.run.app/api/scheduler/process-scheduled" \
+            --http-method=GET \
+            --headers="X-Scheduler-Secret=${{ secrets.SCHEDULER_SECRET }}" \
+            --time-zone="Asia/Tokyo" \
+            --attempt-deadline="300s" \
+            --project=${{ env.PROJECT_ID }} \
+            --quiet

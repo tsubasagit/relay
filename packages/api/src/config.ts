@@ -35,6 +35,9 @@ export const config = {
   // Dashboard URL
   dashboardUrl: process.env.DASHBOARD_URL || "http://localhost:5174",
 
+  // Scheduler secret (Cloud Scheduler → process-scheduled endpoint)
+  schedulerSecret: process.env.SCHEDULER_SECRET || "dev-scheduler-secret",
+
   // Default SMTP provider (Gmail)
   defaultSmtpHost: process.env.RELAY_DEFAULT_SMTP_HOST || "smtp.gmail.com",
   defaultSmtpPort: parseInt(process.env.RELAY_DEFAULT_SMTP_PORT || "587"),
